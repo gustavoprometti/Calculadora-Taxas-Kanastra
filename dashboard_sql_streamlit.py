@@ -153,22 +153,63 @@ st.sidebar.header("🔍 Filtros")
 
 # Filtro de Data
 st.sidebar.subheader("📅 Período")
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    data_inicio = st.date_input(
-        "Data Inicial:",
-        value=datetime.now().date() - timedelta(days=90),
-        max_value=datetime.now().date()
-    )
-with col2:
-    data_fim = st.date_input(
-        "Data Final:",
-        value=datetime.now().date(),
-        max_value=datetime.now().date()
-    )
+
+# Opções de período rápido
+periodo_rapido = st.sidebar.selectbox(
+    "Período rápido:",
+    ["Personalizado", "Hoje", "Ontem", "Últimos 7 dias", "Últimos 30 dias", "Últimos 90 dias", 
+     "Este mês", "Mês passado", "Este ano"],
+    index=5  # Padrão: Últimos 90 dias
+)
+
+# Calcular datas baseado na seleção
+hoje = datetime.now().date()
+
+if periodo_rapido == "Hoje":
+    data_inicio = hoje
+    data_fim = hoje
+elif periodo_rapido == "Ontem":
+    data_inicio = hoje - timedelta(days=1)
+    data_fim = hoje - timedelta(days=1)
+elif periodo_rapido == "Últimos 7 dias":
+    data_inicio = hoje - timedelta(days=7)
+    data_fim = hoje
+elif periodo_rapido == "Últimos 30 dias":
+    data_inicio = hoje - timedelta(days=30)
+    data_fim = hoje
+elif periodo_rapido == "Últimos 90 dias":
+    data_inicio = hoje - timedelta(days=90)
+    data_fim = hoje
+elif periodo_rapido == "Este mês":
+    data_inicio = hoje.replace(day=1)
+    data_fim = hoje
+elif periodo_rapido == "Mês passado":
+    primeiro_dia_mes_atual = hoje.replace(day=1)
+    ultimo_dia_mes_passado = primeiro_dia_mes_atual - timedelta(days=1)
+    data_inicio = ultimo_dia_mes_passado.replace(day=1)
+    data_fim = ultimo_dia_mes_passado
+elif periodo_rapido == "Este ano":
+    data_inicio = hoje.replace(month=1, day=1)
+    data_fim = hoje
+else:  # Personalizado
+    col1, col2 = st.sidebar.columns(2)
+    with col1:
+        data_inicio = st.date_input(
+            "Data Inicial:",
+            value=hoje - timedelta(days=90),
+            max_value=hoje,
+            key="data_inicio_custom"
+        )
+    with col2:
+        data_fim = st.date_input(
+            "Data Final:",
+            value=hoje,
+            max_value=hoje,
+            key="data_fim_custom"
+        )
 
 dias_periodo = (data_fim - data_inicio).days
-st.sidebar.info(f"**{dias_periodo} dias** de {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
+st.sidebar.info(f"**{dias_periodo + 1} dias** de {data_inicio.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')}")
 
 st.sidebar.divider()
 
@@ -517,7 +558,10 @@ if 'df' in st.session_state:
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("📝 Registros Filtrados", f"{len(df):,}", delta=f"{len(df) - len(df_original):,}")
+        registros_filtrados = len(df)
+        registros_total = len(df_original)
+        diferenca = registros_filtrados - registros_total
+        st.metric("📝 Registros Filtrados", f"{registros_filtrados:,}", delta=f"{diferenca:,}", delta_color="off")
     
     with col2:
         if 'fund_id' in df.columns:
