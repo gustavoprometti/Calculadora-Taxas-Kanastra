@@ -726,160 +726,165 @@ if st.session_state.dados_editados is not None:
     elif st.session_state.tabela_selecionada == "fee_variavel" and acao == "Editar Taxa Existente":
         st.subheader("✏️ Editar Taxa Variável Existente")
         
-        # Mapeamento de serviços
-        servicos_map = {
-            "Administração": "administration",
-            "Gestão": "management",
-            "Performance": "performance",
-            "Custódia": "custody"
-        }
-        servicos_map_reverse = {v: k for k, v in servicos_map.items()}
-        
-        with st.form("form_editar_taxa_variavel"):
-            st.markdown("### 📝 Selecione o cliente e serviço para editar todas as faixas")
+        # Verificar se dados foram carregados
+        if st.session_state.dados_editados is None:
+            st.warning("⚠️ **Por favor, carregue os dados primeiro!**")
+            st.info("👆 Use o botão '📊 Carregar Dados' acima para carregar a tabela Taxa Variável")
+        else:
+            # Mapeamento de serviços
+            servicos_map = {
+                "Administração": "administration",
+                "Gestão": "management",
+                "Performance": "performance",
+                "Custódia": "custody"
+                }
+            servicos_map_reverse = {v: k for k, v in servicos_map.items()}
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Listar todos os clientes disponíveis
-                df = st.session_state.dados_editados
-                clientes_disponiveis_var = sorted(df['cliente'].unique())
-                cliente_edit_var = st.selectbox(
-                    "Selecione o Cliente",
-                    options=clientes_disponiveis_var,
-                    key="edit_var_cliente"
-                )
-            
-            with col2:
-                service_type_edit_pt = st.selectbox(
-                    "Selecione o Serviço",
-                    ["Administração", "Gestão", "Performance", "Custódia"],
-                    key="edit_var_service"
-                )
-            
-            submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
-            
-            if submitted_buscar:
-                # Verificar se dados foram carregados
-                if st.session_state.dados_editados is None:
-                    st.error("❌ Por favor, carregue os dados primeiro usando o botão '📊 Carregar Dados'")
-                elif st.session_state.tabela_selecionada != "fee_variavel":
-                    st.error("❌ Esta opção é apenas para Taxa Variável. Selecione a tabela correta.")
-                else:
-                    # Converter serviço para inglês
-                    service_type_en = servicos_map[service_type_edit_pt]
-                    
-                    # Buscar todas as faixas deste cliente+serviço
+            with st.form("form_editar_taxa_variavel"):
+                st.markdown("### 📝 Selecione o cliente e serviço para editar todas as faixas")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Listar todos os clientes disponíveis
                     df = st.session_state.dados_editados
-                    registros = df[(df['cliente'] == cliente_edit_var) & (df['service_type'] == service_type_en)]
-                    
-                    if not registros.empty:
-                        # Ordenar por lower_bound
-                        registros = registros.sort_values('lower_bound')
-                        st.session_state.faixas_var_para_editar = registros.to_dict('records')
-                        st.success(f"✅ {len(registros)} faixas encontradas! Atualize os valores abaixo.")
-                        st.rerun()
+                    clientes_disponiveis_var = sorted(df['cliente'].unique())
+                    cliente_edit_var = st.selectbox(
+                        "Selecione o Cliente",
+                        options=clientes_disponiveis_var,
+                        key="edit_var_cliente"
+                    )
+                
+                with col2:
+                    service_type_edit_pt = st.selectbox(
+                        "Selecione o Serviço",
+                        ["Administração", "Gestão", "Performance", "Custódia"],
+                        key="edit_var_service"
+                    )
+                
+                    submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
+                
+                if submitted_buscar:
+                    # Verificar se dados foram carregados
+                    if st.session_state.dados_editados is None:
+                        st.error("❌ Por favor, carregue os dados primeiro usando o botão '📊 Carregar Dados'")
+                    elif st.session_state.tabela_selecionada != "fee_variavel":
+                        st.error("❌ Esta opção é apenas para Taxa Variável. Selecione a tabela correta.")
                     else:
-                        st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {service_type_edit_pt}")
-        
-        # Se há faixas carregadas, mostrar formulário de edição
-        if 'faixas_var_para_editar' in st.session_state and st.session_state.faixas_var_para_editar:
-            st.markdown("---")
+                        # Converter serviço para inglês
+                        service_type_en = servicos_map[service_type_edit_pt]
+                        
+                        # Buscar todas as faixas deste cliente+serviço
+                        df = st.session_state.dados_editados
+                        registros = df[(df['cliente'] == cliente_edit_var) & (df['service_type'] == service_type_en)]
+                        
+                        if not registros.empty:
+                            # Ordenar por lower_bound
+                            registros = registros.sort_values('lower_bound')
+                            st.session_state.faixas_var_para_editar = registros.to_dict('records')
+                            st.success(f"✅ {len(registros)} faixas encontradas! Atualize os valores abaixo.")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {service_type_edit_pt}")
             
-            with st.form("form_atualizar_faixas_variavel"):
-                st.markdown("### 📊 Edite as faixas abaixo")
-                st.info(f"ℹ️ Total de {len(st.session_state.faixas_var_para_editar)} linha(s) para editar")
-                
-                faixas_editadas = []
-                
-                for idx, faixa in enumerate(st.session_state.faixas_var_para_editar):
-                    st.markdown(f"**Linha {idx + 1}:**")
-                    col_a, col_b, col_c = st.columns(3)
-                    
-                    with col_a:
-                        lower_edit = st.number_input(
-                            f"PL Inicial (R$)",
-                            value=float(faixa['lower_bound']),
-                            min_value=0.0,
-                            step=1000000.0,
-                            format="%.0f",
-                            key=f"edit_lower_{idx}"
-                        )
-                    
-                    with col_b:
-                        # upper_bound pode ser None para algumas linhas
-                        upper_val = float(faixa.get('upper_bound', 0)) if faixa.get('upper_bound') is not None else 0.0
-                        upper_edit = st.number_input(
-                            f"PL Final (R$)",
-                            value=upper_val,
-                            min_value=0.0,
-                            step=1000000.0,
-                            format="%.0f",
-                            key=f"edit_upper_{idx}",
-                            help="Deixe 0 se não aplicável"
-                        )
-                    
-                    with col_c:
-                        fee_edit = st.number_input(
-                            f"Taxa (%)",
-                            value=float(faixa['fee_percentage']),
-                            min_value=0.0,
-                            max_value=100.0,
-                            step=0.0001,
-                            format="%.4f",
-                            key=f"edit_fee_{idx}"
-                        )
-                    
-                    faixas_editadas.append({
-                        "fund_id": int(faixa['fund_id']),
-                        "cliente": faixa['cliente'],
-                        "service_type": faixa['service_type'],
-                        "lower_bound": lower_edit,
-                        "upper_bound": upper_edit if upper_edit > 0 else None,
-                        "fee_percentage": fee_edit,
-                        "original_lower": float(faixa['lower_bound'])  # Para identificar qual linha atualizar
-                    })
-                
+            # Se há faixas carregadas, mostrar formulário de edição
+            if 'faixas_var_para_editar' in st.session_state and st.session_state.faixas_var_para_editar:
                 st.markdown("---")
                 
-                col_btn1, col_btn2 = st.columns(2)
-                
-                with col_btn1:
-                    submitted_update = st.form_submit_button("💾 Salvar Todas as Alterações", use_container_width=True, type="primary")
-                
-                with col_btn2:
-                    cancelar_update = st.form_submit_button("❌ Cancelar", use_container_width=True)
-                
-                if submitted_update:
-                    # Salvar todas as faixas editadas no BigQuery
-                    sucesso = True
-                    for faixa_edit in faixas_editadas:
-                        taxa_var_editada = {
-                            "fund_id": faixa_edit["fund_id"],
-                            "cliente": faixa_edit["cliente"],
-                            "service_type": faixa_edit["service_type"],
-                            "lower_bound": faixa_edit["lower_bound"],
-                            "upper_bound": faixa_edit["upper_bound"],
-                            "fee_percentage": faixa_edit["fee_percentage"],
-                            "original_lower": faixa_edit["original_lower"]  # Para WHERE clause
-                        }
-                        
-                        usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
-                        if not salvar_alteracao_pendente("UPDATE", "fee_variavel", taxa_var_editada, usuario_atual):
-                            sucesso = False
-                            break
+                with st.form("form_atualizar_faixas_variavel"):
+                    st.markdown("### 📊 Edite as faixas abaixo")
+                    st.info(f"ℹ️ Total de {len(st.session_state.faixas_var_para_editar)} linha(s) para editar")
                     
-                    if sucesso:
-                        st.success(f"✅ {len(faixas_editadas)} faixa(s) atualizada(s)! Cliente: {faixas_editadas[0]['cliente']}")
-                        st.info("⏳ Aguardando aprovação de um aprovador")
+                    faixas_editadas = []
+                    
+                    for idx, faixa in enumerate(st.session_state.faixas_var_para_editar):
+                        st.markdown(f"**Linha {idx + 1}:**")
+                        col_a, col_b, col_c = st.columns(3)
+                        
+                        with col_a:
+                            lower_edit = st.number_input(
+                                f"PL Inicial (R$)",
+                                value=float(faixa['lower_bound']),
+                                min_value=0.0,
+                                step=1000000.0,
+                                format="%.0f",
+                                key=f"edit_lower_{idx}"
+                            )
+                        
+                        with col_b:
+                            # upper_bound pode ser None para algumas linhas
+                            upper_val = float(faixa.get('upper_bound', 0)) if faixa.get('upper_bound') is not None else 0.0
+                            upper_edit = st.number_input(
+                                f"PL Final (R$)",
+                                value=upper_val,
+                                min_value=0.0,
+                                step=1000000.0,
+                                format="%.0f",
+                                key=f"edit_upper_{idx}",
+                                help="Deixe 0 se não aplicável"
+                            )
+                        
+                        with col_c:
+                            fee_edit = st.number_input(
+                                f"Taxa (%)",
+                                value=float(faixa['fee_percentage']),
+                                min_value=0.0,
+                                max_value=100.0,
+                                step=0.0001,
+                                format="%.4f",
+                                key=f"edit_fee_{idx}"
+                            )
+                        
+                        faixas_editadas.append({
+                            "fund_id": int(faixa['fund_id']),
+                            "cliente": faixa['cliente'],
+                            "service_type": faixa['service_type'],
+                            "lower_bound": lower_edit,
+                            "upper_bound": upper_edit if upper_edit > 0 else None,
+                            "fee_percentage": fee_edit,
+                            "original_lower": float(faixa['lower_bound'])  # Para identificar qual linha atualizar
+                        })
+                    
+                    st.markdown("---")
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    
+                    with col_btn1:
+                        submitted_update = st.form_submit_button("💾 Salvar Todas as Alterações", use_container_width=True, type="primary")
+                    
+                    with col_btn2:
+                        cancelar_update = st.form_submit_button("❌ Cancelar", use_container_width=True)
+                    
+                    if submitted_update:
+                        # Salvar todas as faixas editadas no BigQuery
+                        sucesso = True
+                        for faixa_edit in faixas_editadas:
+                            taxa_var_editada = {
+                                "fund_id": faixa_edit["fund_id"],
+                                "cliente": faixa_edit["cliente"],
+                                "service_type": faixa_edit["service_type"],
+                                "lower_bound": faixa_edit["lower_bound"],
+                                "upper_bound": faixa_edit["upper_bound"],
+                                "fee_percentage": faixa_edit["fee_percentage"],
+                                "original_lower": faixa_edit["original_lower"]  # Para WHERE clause
+                            }
+                            
+                            usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                            if not salvar_alteracao_pendente("UPDATE", "fee_variavel", taxa_var_editada, usuario_atual):
+                                sucesso = False
+                                break
+                        
+                        if sucesso:
+                            st.success(f"✅ {len(faixas_editadas)} faixa(s) atualizada(s)! Cliente: {faixas_editadas[0]['cliente']}")
+                            st.info("⏳ Aguardando aprovação de um aprovador")
+                            del st.session_state.faixas_var_para_editar
+                            st.rerun()
+                        else:
+                            st.error("❌ Erro ao salvar uma ou mais alterações")
+                    
+                    if cancelar_update:
                         del st.session_state.faixas_var_para_editar
                         st.rerun()
-                    else:
-                        st.error("❌ Erro ao salvar uma ou mais alterações")
-                
-                if cancelar_update:
-                    del st.session_state.faixas_var_para_editar
-                    st.rerun()
 
     
     # =======================
