@@ -101,11 +101,39 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Configurações de aprovadores
-APROVADORES = {
-    "EricIsamo": {"senha": "kanastra2025", "nome": "Eric Isamo"},
-    "ThiagoGarcia": {"senha": "kanastra2025", "nome": "Thiago Garcia"}
+# Configurações de usuários
+USUARIOS = {
+    # Aprovadores - podem aprovar/rejeitar alterações
+    "EricIsamo": {
+        "senha": "kanastra2025", 
+        "nome": "Eric Isamo",
+        "perfil": "aprovador",
+        "email": "eric@kanastra.com"
+    },
+    "ThiagoGarcia": {
+        "senha": "kanastra2025", 
+        "nome": "Thiago Garcia",
+        "perfil": "aprovador",
+        "email": "thiago@kanastra.com"
+    },
+    
+    # Editores - podem adicionar/editar, mas precisam de aprovação
+    "GustavoPrometti": {
+        "senha": "editor2025", 
+        "nome": "Gustavo Prometti",
+        "perfil": "editor",
+        "email": "gustavo.prometti@kanastra.com.br"
+    },
+    "FinanceUser": {
+        "senha": "editor2025", 
+        "nome": "Usuário Finance",
+        "perfil": "editor",
+        "email": "finance@kanastra.com"
+    }
 }
+
+# Manter compatibilidade com código antigo
+APROVADORES = {k: v for k, v in USUARIOS.items() if v.get("perfil") == "aprovador"}
 
 # Inicializar session_state
 if 'dados_originais' not in st.session_state:
@@ -114,7 +142,11 @@ if 'dados_editados' not in st.session_state:
     st.session_state.dados_editados = None
 if 'alteracoes_pendentes' not in st.session_state:
     st.session_state.alteracoes_pendentes = []
-if 'usuario_aprovador' not in st.session_state:
+if 'usuario_logado' not in st.session_state:
+    st.session_state.usuario_logado = None
+if 'perfil_usuario' not in st.session_state:
+    st.session_state.perfil_usuario = None
+if 'usuario_aprovador' not in st.session_state:  # Manter compatibilidade
     st.session_state.usuario_aprovador = None
 if 'tabela_selecionada' not in st.session_state:
     st.session_state.tabela_selecionada = None
@@ -387,10 +419,12 @@ if st.session_state.dados_editados is not None:
                     "fee_min": fee_min
                 }
                 
-                # Salvar no BigQuery
-                if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_0):
-                    if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_max):
+                # Salvar no BigQuery (com usuário logado)
+                usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_0, usuario_atual):
+                    if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_max, usuario_atual):
                         st.success(f"✅ Taxa mínima criada! Cliente: {cliente} - {servico} - 2 linhas adicionadas (faixa 0 e máxima)")
+                        st.info("⏳ Aguardando aprovação de um aprovador")
                         st.rerun()
                     else:
                         st.error("❌ Erro ao salvar segunda linha")
@@ -444,9 +478,11 @@ if st.session_state.dados_editados is not None:
                         "original_lower": float(reg_data['faixa'])  # Chave para UPDATE
                     }
                     
-                    # Salvar no BigQuery
-                    if salvar_alteracao_pendente("UPDATE", "fee_minimo", taxa_editada):
+                    # Salvar no BigQuery (com usuário logado)
+                    usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                    if salvar_alteracao_pendente("UPDATE", "fee_minimo", taxa_editada, usuario_atual):
                         st.success(f"✅ Fee mínimo atualizado! Cliente: {cliente_edit} - {servico_edit} - Novo valor: R$ {novo_fee_min:,.2f}")
+                        st.info("⏳ Aguardando aprovação de um aprovador")
                         st.rerun()
                     else:
                         st.error("❌ Erro ao salvar alteração")
@@ -589,18 +625,20 @@ if st.session_state.dados_editados is not None:
                         }
                         linhas_criadas.append(linha_fim)
                 
-                # Salvar todas as linhas no BigQuery
+                # Salvar todas as linhas no BigQuery (com usuário logado)
+                usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
                 sucesso = True
                 for linha in linhas_criadas:
                     # Remover campos temporários
                     linha_limpa = {k: v for k, v in linha.items() if k not in ['tipo_alteracao', 'timestamp']}
-                    if not salvar_alteracao_pendente("INSERT", "fee_variavel", linha_limpa):
+                    if not salvar_alteracao_pendente("INSERT", "fee_variavel", linha_limpa, usuario_atual):
                         sucesso = False
                         break
                 
                 if sucesso:
                     st.success(f"✅ {len(linhas_criadas)} linha(s) de taxa variável criada(s)! Cliente: {cliente_var} - {service_type_pt}")
                     st.info(f"📊 {len(faixas_data)} faixas configuradas = {len(linhas_criadas)} linhas no BigQuery")
+                    st.info("⏳ Aguardando aprovação de um aprovador")
                     st.rerun()
                 else:
                     st.error("❌ Erro ao salvar uma ou mais linhas")
@@ -740,12 +778,14 @@ if st.session_state.dados_editados is not None:
                             "original_lower": faixa_edit["original_lower"]  # Para WHERE clause
                         }
                         
-                        if not salvar_alteracao_pendente("UPDATE", "fee_variavel", taxa_var_editada):
+                        usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                        if not salvar_alteracao_pendente("UPDATE", "fee_variavel", taxa_var_editada, usuario_atual):
                             sucesso = False
                             break
                     
                     if sucesso:
                         st.success(f"✅ {len(faixas_editadas)} faixa(s) atualizada(s)! Cliente: {faixas_editadas[0]['cliente']}")
+                        st.info("⏳ Aguardando aprovação de um aprovador")
                         del st.session_state.faixas_var_para_editar
                         st.rerun()
                     else:
@@ -813,43 +853,109 @@ if st.session_state.dados_editados is not None:
 # =======================
 
 st.markdown("---")
-st.subheader("🔐 Painel de Aprovação")
 
-col_login1, col_login2, col_login3 = st.columns([1, 1, 2])
-
-with col_login1:
-    usuario = st.text_input("Usuário Aprovador", key="usuario", placeholder="analista ou gestor")
-
-with col_login2:
-    senha = st.text_input("Senha", type="password", key="senha")
-
-with col_login3:
-    if st.button("🔓 Login", use_container_width=True):
-        if usuario in APROVADORES and APROVADORES[usuario]["senha"] == senha:
-            st.session_state.usuario_aprovador = usuario
-            st.success(f"✅ Login realizado como {APROVADORES[usuario]['nome']}!")
-            st.rerun()
-        else:
-            st.error("❌ Credenciais incorretas!")
+# Verificar se usuário está logado
+if not st.session_state.usuario_logado:
+    st.subheader("🔐 Login do Sistema")
+    st.info("💡 **Editores** podem adicionar/editar taxas | **Aprovadores** podem aprovar alterações")
+    
+    col_login1, col_login2, col_login3 = st.columns([1, 1, 2])
+    
+    with col_login1:
+        usuario = st.text_input("Usuário", key="usuario", placeholder="Digite seu usuário")
+    
+    with col_login2:
+        senha = st.text_input("Senha", type="password", key="senha")
+    
+    with col_login3:
+        if st.button("🔓 Entrar", use_container_width=True, type="primary"):
+            if usuario in USUARIOS and USUARIOS[usuario]["senha"] == senha:
+                # Login bem-sucedido
+                st.session_state.usuario_logado = usuario
+                st.session_state.perfil_usuario = USUARIOS[usuario]["perfil"]
+                
+                # Manter compatibilidade com código antigo
+                if USUARIOS[usuario]["perfil"] == "aprovador":
+                    st.session_state.usuario_aprovador = usuario
+                
+                st.success(f"✅ Login realizado como **{USUARIOS[usuario]['nome']}** ({USUARIOS[usuario]['perfil'].upper()})")
+                st.rerun()
+            else:
+                st.error("❌ Credenciais incorretas!")
+    
+    st.markdown("---")
+    st.info("🔒 **Faça login para acessar o painel de aprovação e gerenciar taxas**")
 
 # Se logado
-if st.session_state.usuario_aprovador:
-    st.success(f"👤 Aprovador: **{APROVADORES[st.session_state.usuario_aprovador]['nome']}** ({st.session_state.usuario_aprovador})")
+else:
+    perfil = st.session_state.perfil_usuario
+    nome = USUARIOS[st.session_state.usuario_logado]['nome']
     
-    if st.button("🚪 Logout"):
-        st.session_state.usuario_aprovador = None
-        st.rerun()
+    # Ícones por perfil
+    icone_perfil = "👑" if perfil == "aprovador" else "✏️"
+    cor_perfil = "green" if perfil == "aprovador" else "blue"
+    
+    col_user1, col_user2 = st.columns([3, 1])
+    
+    with col_user1:
+        st.markdown(f"""
+        <div style='background-color: #{cor_perfil}22; padding: 15px; border-radius: 8px; border-left: 4px solid #{cor_perfil};'>
+            <p style='margin: 0; font-size: 16px;'>
+                {icone_perfil} <strong>{nome}</strong> ({st.session_state.usuario_logado})
+            </p>
+            <p style='margin: 5px 0 0 0; font-size: 14px; color: #666;'>
+                Perfil: <strong>{perfil.upper()}</strong> | Email: {USUARIOS[st.session_state.usuario_logado]['email']}
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_user2:
+        if st.button("🚪 Sair", use_container_width=True, type="secondary"):
+            st.session_state.usuario_logado = None
+            st.session_state.perfil_usuario = None
+            st.session_state.usuario_aprovador = None
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # PAINEL DE APROVAÇÃO (apenas para aprovadores)
+    if perfil == "aprovador":
+        st.subheader("👑 Painel de Aprovação")
+    else:
+        st.subheader("📊 Suas Alterações Pendentes")
     
     # Carregar alterações pendentes do BigQuery
     alteracoes_pendentes = carregar_alteracoes_pendentes()
     
-    if alteracoes_pendentes:
+    # Filtrar alterações conforme perfil
+    if perfil == "editor":
+        # Editores veem apenas suas próprias alterações
+        alteracoes_filtradas = [a for a in alteracoes_pendentes if a.get('usuario') == st.session_state.usuario_logado]
+    else:
+        # Aprovadores veem todas as alterações
+        alteracoes_filtradas = alteracoes_pendentes
+    
+    if alteracoes_filtradas:
         st.markdown("---")
-        st.subheader(f"⏳ Alterações Pendentes ({len(alteracoes_pendentes)})")
+        
+        if perfil == "aprovador":
+            st.subheader(f"⏳ Todas as Alterações Pendentes ({len(alteracoes_filtradas)})")
+        else:
+            st.subheader(f"⏳ Suas Alterações Pendentes ({len(alteracoes_filtradas)})")
         
         # Processar cada alteração individualmente
-        for idx, alteracao in enumerate(alteracoes_pendentes):
-            st.markdown(f"### 📝 Alteração #{idx + 1}")
+        for idx, alteracao in enumerate(alteracoes_filtradas):
+            usuario_alteracao = alteracao.get('usuario', 'N/A')
+            
+            # Cor de fundo diferente se for alteração de outro usuário (para aprovadores)
+            if perfil == "aprovador" and usuario_alteracao != st.session_state.usuario_logado:
+                st.markdown(f"""
+                <div style='background-color: #fffbea; padding: 10px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 10px;'>
+                    <strong>📝 Alteração #{idx + 1}</strong> - <em>Por: {usuario_alteracao}</em>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"### 📝 Alteração #{idx + 1}")
             
             # Pegar dados do campo JSON
             dados = alteracao['dados']
@@ -863,7 +969,7 @@ if st.session_state.usuario_aprovador:
             with col_info3:
                 st.info(f"**Tabela:** {alteracao['tabela']}")
             with col_info4:
-                st.info(f"**Usuário:** {alteracao.get('usuario', 'N/A')}")
+                st.info(f"**Por:** {usuario_alteracao}")
             
             # Mostrar dados da alteração como tabela
             df_alteracao = pd.DataFrame([dados])
@@ -957,22 +1063,40 @@ if st.session_state.usuario_aprovador:
             
             st.markdown("---")
     else:
-        st.info("ℹ️ Nenhuma alteração pendente")
-else:
-    # Mostrar contador de alterações pendentes mesmo sem login
+        # Mensagem quando não há alterações
+        if perfil == "aprovador":
+            st.info("✅ Não há alterações pendentes de aprovação no momento")
+        else:
+            st.info("📝 Você ainda não criou nenhuma alteração pendente")
+
+# Mostrar contador de alterações pendentes mesmo sem login
+if not st.session_state.usuario_logado:
     alteracoes_nao_logado = carregar_alteracoes_pendentes()
     if alteracoes_nao_logado:
-        st.warning(f"⏳ {len(alteracoes_nao_logado)} alteração(ões) aguardando aprovação")
+        st.warning(f"⏳ {len(alteracoes_nao_logado)} alteração(ões) aguardando aprovação. Faça login para revisar.")
 
 # Sidebar
 st.sidebar.header("ℹ️ Como Usar")
 st.sidebar.markdown("""
-1. **Selecione** a tabela
-2. **Carregue** os dados
-3. **Visualize** a planilha
-4. **Crie ou edite** taxas usando os formulários
-5. **Faça login como aprovador** para aprovar/rejeitar mudanças
-                    
-                    
-*Qualquer usuário @kanastra.com.br pode criar/editar taxas*
+### 📋 Passo a Passo:
+1. **Faça login** com suas credenciais
+2. **Selecione** a tabela desejada
+3. **Carregue** os dados
+4. **Visualize** a planilha completa
+5. **Crie ou edite** taxas usando os formulários
+6. **Aguarde aprovação** de um aprovador
+
+### 👥 Perfis de Usuário:
+
+**✏️ Editor** (Gustavo, Finance User)
+- Pode adicionar novas taxas
+- Pode editar taxas existentes
+- Alterações ficam pendentes de aprovação
+- Visualiza apenas suas próprias alterações
+
+**👑 Aprovador** (Eric, Thiago)
+- Todas as permissões de Editor
+- Pode aprovar/rejeitar alterações
+- Visualiza todas as alterações pendentes
+- Pode aplicar mudanças ao BigQuery
 """)
