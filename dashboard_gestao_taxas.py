@@ -427,6 +427,10 @@ with col2:
                 st.session_state.dados_editados = df.copy()
                 st.session_state.tabela_selecionada = tabela
                 st.success(f"✅ {len(df)} registros carregados!")
+                
+                # DEBUG: Mostrar nomes das colunas
+                if tabela == "fee_variavel":
+                    st.info(f"🔍 **DEBUG - Colunas da tabela:** {', '.join(df.columns.tolist())}")
             elif df is not None:
                 st.warning("⚠️ Tabela vazia")
             else:
