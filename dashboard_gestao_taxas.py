@@ -726,10 +726,20 @@ if st.session_state.dados_editados is not None:
     elif st.session_state.tabela_selecionada == "fee_variavel" and acao == "Editar Taxa Existente":
         st.subheader("✏️ Editar Taxa Variável Existente")
         
-        # Verificar se dados foram carregados
+        # Verificar se dados foram carregados E se são da tabela correta
         if st.session_state.dados_editados is None:
             st.warning("⚠️ **Por favor, carregue os dados primeiro!**")
             st.info("👆 Use o botão '📊 Carregar Dados' acima para carregar a tabela Taxa Variável")
+        elif 'service_type' not in st.session_state.dados_editados.columns:
+            st.error("❌ **ATENÇÃO: Dados incompatíveis detectados!**")
+            st.warning("⚠️ Os dados carregados são da Taxa Mínima, mas você está tentando editar Taxa Variável.")
+            st.info("👉 **SOLUÇÃO:** Clique no botão '📊 Carregar Dados' acima novamente para recarregar a Taxa Variável corretamente.")
+            
+            # Botão para forçar limpeza dos dados
+            if st.button("🔄 Limpar Dados e Recarregar", type="primary"):
+                st.session_state.dados_editados = None
+                st.session_state.dados_originais = None
+                st.rerun()
         else:
             # Mapeamento de serviços
             servicos_map = {
