@@ -317,6 +317,84 @@ def atualizar_status_alteracao(alteracao_id, novo_status, aprovador=None):
         return False
 
 # =======================
+# VERIFICAÇÃO DE LOGIN - BLOQUEIO TOTAL
+# =======================
+
+# Verificar se usuário está logado ANTES de mostrar qualquer coisa
+if not st.session_state.usuario_logado:
+    st.markdown("---")
+    st.subheader("🔐 Login do Sistema")
+    st.info("💡 **Editores** podem adicionar/editar taxas | **Aprovadores** podem aprovar alterações")
+    
+    col_login1, col_login2, col_login3 = st.columns([1, 1, 2])
+    
+    with col_login1:
+        usuario = st.text_input("Usuário", key="usuario", placeholder="Digite seu usuário")
+    
+    with col_login2:
+        senha = st.text_input("Senha", type="password", key="senha")
+    
+    with col_login3:
+        if st.button("🔓 Entrar", use_container_width=True, type="primary"):
+            if usuario in USUARIOS and USUARIOS[usuario]["senha"] == senha:
+                # Login bem-sucedido
+                st.session_state.usuario_logado = usuario
+                st.session_state.perfil_usuario = USUARIOS[usuario]["perfil"]
+                
+                # Manter compatibilidade com código antigo
+                if USUARIOS[usuario]["perfil"] == "aprovador":
+                    st.session_state.usuario_aprovador = usuario
+                
+                st.success(f"✅ Login realizado como **{USUARIOS[usuario]['nome']}** ({USUARIOS[usuario]['perfil'].upper()})")
+                st.rerun()
+            else:
+                st.error("❌ Credenciais incorretas!")
+    
+    st.markdown("---")
+    st.info("🔒 **Faça login para acessar o dashboard de gestão de taxas**")
+    
+    # Mostrar contador de alterações pendentes mesmo sem login
+    alteracoes_nao_logado = carregar_alteracoes_pendentes()
+    if alteracoes_nao_logado:
+        st.warning(f"⏳ {len(alteracoes_nao_logado)} alteração(ões) aguardando aprovação. Faça login para revisar.")
+    
+    st.stop()  # PARAR AQUI - NÃO MOSTRAR MAIS NADA
+
+# =======================
+# USUÁRIO LOGADO - MOSTRAR INFORMAÇÕES
+# =======================
+
+perfil = st.session_state.perfil_usuario
+nome = USUARIOS[st.session_state.usuario_logado]['nome']
+
+# Ícones por perfil
+icone_perfil = "👑" if perfil == "aprovador" else "✏️"
+cor_perfil = "green" if perfil == "aprovador" else "blue"
+
+col_user1, col_user2 = st.columns([3, 1])
+
+with col_user1:
+    st.markdown(f"""
+    <div style='background-color: #{cor_perfil}22; padding: 15px; border-radius: 8px; border-left: 4px solid #{cor_perfil};'>
+        <p style='margin: 0; font-size: 16px;'>
+            {icone_perfil} <strong>{nome}</strong> ({st.session_state.usuario_logado})
+        </p>
+        <p style='margin: 5px 0 0 0; font-size: 14px; color: #666;'>
+            Perfil: <strong>{perfil.upper()}</strong> | Email: {USUARIOS[st.session_state.usuario_logado]['email']}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_user2:
+    if st.button("🚪 Sair", use_container_width=True, type="secondary"):
+        st.session_state.usuario_logado = None
+        st.session_state.perfil_usuario = None
+        st.session_state.usuario_aprovador = None
+        st.rerun()
+
+st.markdown("---")
+
+# =======================
 # SEÇÃO 1: SELEÇÃO E CARREGAMENTO
 # =======================
 
@@ -849,231 +927,161 @@ if st.session_state.dados_editados is not None:
     )
 
 # =======================
-# SEÇÃO 5: APROVAÇÃO
+# SEÇÃO 5: PAINEL DE APROVAÇÃO
 # =======================
 
 st.markdown("---")
 
-# Verificar se usuário está logado
-if not st.session_state.usuario_logado:
-    st.subheader("🔐 Login do Sistema")
-    st.info("💡 **Editores** podem adicionar/editar taxas | **Aprovadores** podem aprovar alterações")
-    
-    col_login1, col_login2, col_login3 = st.columns([1, 1, 2])
-    
-    with col_login1:
-        usuario = st.text_input("Usuário", key="usuario", placeholder="Digite seu usuário")
-    
-    with col_login2:
-        senha = st.text_input("Senha", type="password", key="senha")
-    
-    with col_login3:
-        if st.button("🔓 Entrar", use_container_width=True, type="primary"):
-            if usuario in USUARIOS and USUARIOS[usuario]["senha"] == senha:
-                # Login bem-sucedido
-                st.session_state.usuario_logado = usuario
-                st.session_state.perfil_usuario = USUARIOS[usuario]["perfil"]
-                
-                # Manter compatibilidade com código antigo
-                if USUARIOS[usuario]["perfil"] == "aprovador":
-                    st.session_state.usuario_aprovador = usuario
-                
-                st.success(f"✅ Login realizado como **{USUARIOS[usuario]['nome']}** ({USUARIOS[usuario]['perfil'].upper()})")
-                st.rerun()
-            else:
-                st.error("❌ Credenciais incorretas!")
-    
-    st.markdown("---")
-    st.info("🔒 **Faça login para acessar o painel de aprovação e gerenciar taxas**")
-
-# Se logado
+# PAINEL DE APROVAÇÃO (apenas para aprovadores)
+if perfil == "aprovador":
+    st.subheader("👑 Painel de Aprovação")
 else:
-    perfil = st.session_state.perfil_usuario
-    nome = USUARIOS[st.session_state.usuario_logado]['nome']
-    
-    # Ícones por perfil
-    icone_perfil = "👑" if perfil == "aprovador" else "✏️"
-    cor_perfil = "green" if perfil == "aprovador" else "blue"
-    
-    col_user1, col_user2 = st.columns([3, 1])
-    
-    with col_user1:
-        st.markdown(f"""
-        <div style='background-color: #{cor_perfil}22; padding: 15px; border-radius: 8px; border-left: 4px solid #{cor_perfil};'>
-            <p style='margin: 0; font-size: 16px;'>
-                {icone_perfil} <strong>{nome}</strong> ({st.session_state.usuario_logado})
-            </p>
-            <p style='margin: 5px 0 0 0; font-size: 14px; color: #666;'>
-                Perfil: <strong>{perfil.upper()}</strong> | Email: {USUARIOS[st.session_state.usuario_logado]['email']}
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col_user2:
-        if st.button("🚪 Sair", use_container_width=True, type="secondary"):
-            st.session_state.usuario_logado = None
-            st.session_state.perfil_usuario = None
-            st.session_state.usuario_aprovador = None
-            st.rerun()
-    
+    st.subheader("📊 Suas Alterações Pendentes")
+
+# Carregar alterações pendentes do BigQuery
+alteracoes_pendentes = carregar_alteracoes_pendentes()
+
+# Filtrar alterações conforme perfil
+if perfil == "editor":
+    # Editores veem apenas suas próprias alterações
+    alteracoes_filtradas = [a for a in alteracoes_pendentes if a.get('usuario') == st.session_state.usuario_logado]
+else:
+    # Aprovadores veem todas as alterações
+    alteracoes_filtradas = alteracoes_pendentes
+
+if alteracoes_filtradas:
     st.markdown("---")
     
-    # PAINEL DE APROVAÇÃO (apenas para aprovadores)
     if perfil == "aprovador":
-        st.subheader("👑 Painel de Aprovação")
+        st.subheader(f"⏳ Todas as Alterações Pendentes ({len(alteracoes_filtradas)})")
     else:
-        st.subheader("📊 Suas Alterações Pendentes")
+        st.subheader(f"⏳ Suas Alterações Pendentes ({len(alteracoes_filtradas)})")
     
-    # Carregar alterações pendentes do BigQuery
-    alteracoes_pendentes = carregar_alteracoes_pendentes()
-    
-    # Filtrar alterações conforme perfil
-    if perfil == "editor":
-        # Editores veem apenas suas próprias alterações
-        alteracoes_filtradas = [a for a in alteracoes_pendentes if a.get('usuario') == st.session_state.usuario_logado]
-    else:
-        # Aprovadores veem todas as alterações
-        alteracoes_filtradas = alteracoes_pendentes
-    
-    if alteracoes_filtradas:
-        st.markdown("---")
+    # Processar cada alteração individualmente
+    for idx, alteracao in enumerate(alteracoes_filtradas):
+        usuario_alteracao = alteracao.get('usuario', 'N/A')
         
-        if perfil == "aprovador":
-            st.subheader(f"⏳ Todas as Alterações Pendentes ({len(alteracoes_filtradas)})")
+        # Cor de fundo diferente se for alteração de outro usuário (para aprovadores)
+        if perfil == "aprovador" and usuario_alteracao != st.session_state.usuario_logado:
+            st.markdown(f"""
+            <div style='background-color: #fffbea; padding: 10px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 10px;'>
+                <strong>📝 Alteração #{idx + 1}</strong> - <em>Por: {usuario_alteracao}</em>
+            </div>
+            """, unsafe_allow_html=True)
         else:
-            st.subheader(f"⏳ Suas Alterações Pendentes ({len(alteracoes_filtradas)})")
+            st.markdown(f"### 📝 Alteração #{idx + 1}")
         
-        # Processar cada alteração individualmente
-        for idx, alteracao in enumerate(alteracoes_filtradas):
-            usuario_alteracao = alteracao.get('usuario', 'N/A')
-            
-            # Cor de fundo diferente se for alteração de outro usuário (para aprovadores)
-            if perfil == "aprovador" and usuario_alteracao != st.session_state.usuario_logado:
-                st.markdown(f"""
-                <div style='background-color: #fffbea; padding: 10px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 10px;'>
-                    <strong>📝 Alteração #{idx + 1}</strong> - <em>Por: {usuario_alteracao}</em>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"### 📝 Alteração #{idx + 1}")
-            
-            # Pegar dados do campo JSON
-            dados = alteracao['dados']
-            
-            # Exibir informações
-            col_info1, col_info2, col_info3, col_info4 = st.columns(4)
-            with col_info1:
-                st.info(f"**Tipo:** {alteracao['tipo_alteracao']}")
-            with col_info2:
-                st.info(f"**Hora:** {alteracao['timestamp'].strftime('%H:%M:%S')}")
-            with col_info3:
-                st.info(f"**Tabela:** {alteracao['tabela']}")
-            with col_info4:
-                st.info(f"**Por:** {usuario_alteracao}")
-            
-            # Mostrar dados da alteração como tabela
-            df_alteracao = pd.DataFrame([dados])
-            st.dataframe(df_alteracao, use_container_width=True, hide_index=True)
-            
-            # Botões de aprovação individual
-            col_btn1, col_btn2 = st.columns(2)
-            with col_btn1:
-                if st.button(f"✅ Aprovar #{idx + 1}", key=f"aprovar_{idx}", use_container_width=True, type="primary"):
-                    # Executar INSERT ou UPDATE no BigQuery
-                    try:
-                        client = get_bigquery_client()
-                        tabela = alteracao['tabela']
-                        dados = alteracao['dados']
+        # Pegar dados do campo JSON
+        dados = alteracao['dados']
+        
+        # Exibir informações
+        col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+        with col_info1:
+            st.info(f"**Tipo:** {alteracao['tipo_alteracao']}")
+        with col_info2:
+            st.info(f"**Hora:** {alteracao['timestamp'].strftime('%H:%M:%S')}")
+        with col_info3:
+            st.info(f"**Tabela:** {alteracao['tabela']}")
+        with col_info4:
+            st.info(f"**Por:** {usuario_alteracao}")
+        
+        # Mostrar dados da alteração como tabela
+        df_alteracao = pd.DataFrame([dados])
+        st.dataframe(df_alteracao, use_container_width=True, hide_index=True)
+        
+        # Botões de aprovação individual
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button(f"✅ Aprovar #{idx + 1}", key=f"aprovar_{idx}", use_container_width=True, type="primary"):
+                # Executar INSERT ou UPDATE no BigQuery
+                try:
+                    client = get_bigquery_client()
+                    tabela = alteracao['tabela']
+                    dados = alteracao['dados']
+                    
+                    if alteracao['tipo_alteracao'] == "INSERT":
+                        # Gerar SQL INSERT
+                        colunas = [k for k in dados.keys()]
+                        valores = []
+                        for k in colunas:
+                            v = dados[k]
+                            if v is None:
+                                valores.append("NULL")
+                            elif isinstance(v, str):
+                                valores.append(f"'{v}'")
+                            elif isinstance(v, (int, float)):
+                                valores.append(str(v))
+                            else:
+                                valores.append(f"'{str(v)}'")
                         
-                        if alteracao['tipo_alteracao'] == "INSERT":
-                            # Gerar SQL INSERT
-                            colunas = [k for k in dados.keys()]
-                            valores = []
-                            for k in colunas:
-                                v = dados[k]
+                        # Mapear fund_id para `fund id` com backticks
+                        colunas_sql = [f"`fund id`" if c == "fund_id" else c for c in colunas]
+                        
+                        sql = f"""
+                        INSERT INTO `kanastra-live.finance.{tabela}` 
+                        ({', '.join(colunas_sql)})
+                        VALUES ({', '.join(valores)})
+                        """
+                        
+                    else:  # UPDATE
+                        # Gerar SQL UPDATE
+                        set_clause = []
+                        for k, v in dados.items():
+                            if k not in ['fund_id', 'cliente', 'service_type', 'servico', 'empresa', 'original_lower']:  # Não atualizar chaves
                                 if v is None:
-                                    valores.append("NULL")
+                                    set_clause.append(f"{k} = NULL")
                                 elif isinstance(v, str):
-                                    valores.append(f"'{v}'")
+                                    set_clause.append(f"{k} = '{v}'")
                                 elif isinstance(v, (int, float)):
-                                    valores.append(str(v))
+                                    set_clause.append(f"{k} = {v}")
                                 else:
-                                    valores.append(f"'{str(v)}'")
-                            
-                            # Mapear fund_id para `fund id` com backticks
-                            colunas_sql = [f"`fund id`" if c == "fund_id" else c for c in colunas]
-                            
-                            sql = f"""
-                            INSERT INTO `kanastra-live.finance.{tabela}` 
-                            ({', '.join(colunas_sql)})
-                            VALUES ({', '.join(valores)})
-                            """
-                            
-                        else:  # UPDATE
-                            # Gerar SQL UPDATE
-                            set_clause = []
-                            for k, v in dados.items():
-                                if k not in ['fund_id', 'cliente', 'service_type', 'servico', 'empresa', 'original_lower']:  # Não atualizar chaves
-                                    if v is None:
-                                        set_clause.append(f"{k} = NULL")
-                                    elif isinstance(v, str):
-                                        set_clause.append(f"{k} = '{v}'")
-                                    elif isinstance(v, (int, float)):
-                                        set_clause.append(f"{k} = {v}")
-                                    else:
-                                        set_clause.append(f"{k} = '{str(v)}'")
-                            
-                            # WHERE clause baseado na tabela
-                            if tabela == "fee_minimo":
-                                where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}'"
-                            else:  # fee_variavel
-                                original_lower = dados.get('original_lower', dados['lower_bound'])
-                                where = f"`fund id` = {dados['fund_id']} AND service_type = '{dados['service_type']}' AND lower_bound = {original_lower}"
-                            
-                            sql = f"""
-                            UPDATE `kanastra-live.finance.{tabela}`
-                            SET {', '.join(set_clause)}
-                            WHERE {where}
-                            """
+                                    set_clause.append(f"{k} = '{str(v)}'")
                         
-                        # Executar query
-                        st.code(sql, language="sql")
-                        query_job = client.query(sql)
-                        query_job.result()
+                        # WHERE clause baseado na tabela
+                        if tabela == "fee_minimo":
+                            where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}'"
+                        else:  # fee_variavel
+                            original_lower = dados.get('original_lower', dados['lower_bound'])
+                            where = f"`fund id` = {dados['fund_id']} AND service_type = '{dados['service_type']}' AND lower_bound = {original_lower}"
                         
-                        # Atualizar status no BigQuery com aprovador
-                        aprovador = st.session_state.usuario_aprovador
-                        if atualizar_status_alteracao(alteracao['id'], 'APROVADO', aprovador):
-                            st.success(f"✅ Alteração #{idx + 1} aprovada por {aprovador} e aplicada no BigQuery!")
-                            st.rerun()
-                        else:
-                            st.error("❌ Erro ao atualizar status da alteração")
-                        
-                    except Exception as e:
-                        st.error(f"❌ Erro ao aplicar alteração: {str(e)}")
-            
-            with col_btn2:
-                if st.button(f"❌ Rejeitar #{idx + 1}", key=f"rejeitar_{idx}", use_container_width=True):
+                        sql = f"""
+                        UPDATE `kanastra-live.finance.{tabela}`
+                        SET {', '.join(set_clause)}
+                        WHERE {where}
+                        """
+                    
+                    # Executar query
+                    st.code(sql, language="sql")
+                    query_job = client.query(sql)
+                    query_job.result()
+                    
+                    # Atualizar status no BigQuery com aprovador
                     aprovador = st.session_state.usuario_aprovador
-                    if atualizar_status_alteracao(alteracao['id'], 'REJEITADO', aprovador):
-                        st.warning(f"⚠️ Alteração #{idx + 1} rejeitada por {aprovador}!")
+                    if atualizar_status_alteracao(alteracao['id'], 'APROVADO', aprovador):
+                        st.success(f"✅ Alteração #{idx + 1} aprovada por {aprovador} e aplicada no BigQuery!")
                         st.rerun()
                     else:
-                        st.error("❌ Erro ao rejeitar alteração")
-            
-            st.markdown("---")
+                        st.error("❌ Erro ao atualizar status da alteração")
+                    
+                except Exception as e:
+                    st.error(f"❌ Erro ao aplicar alteração: {str(e)}")
+        
+        with col_btn2:
+            if st.button(f"❌ Rejeitar #{idx + 1}", key=f"rejeitar_{idx}", use_container_width=True):
+                aprovador = st.session_state.usuario_aprovador
+                if atualizar_status_alteracao(alteracao['id'], 'REJEITADO', aprovador):
+                    st.warning(f"⚠️ Alteração #{idx + 1} rejeitada por {aprovador}!")
+                    st.rerun()
+                else:
+                    st.error("❌ Erro ao rejeitar alteração")
+        
+        st.markdown("---")
     else:
         # Mensagem quando não há alterações
         if perfil == "aprovador":
             st.info("✅ Não há alterações pendentes de aprovação no momento")
         else:
             st.info("📝 Você ainda não criou nenhuma alteração pendente")
-
-# Mostrar contador de alterações pendentes mesmo sem login
-if not st.session_state.usuario_logado:
-    alteracoes_nao_logado = carregar_alteracoes_pendentes()
-    if alteracoes_nao_logado:
-        st.warning(f"⏳ {len(alteracoes_nao_logado)} alteração(ões) aguardando aprovação. Faça login para revisar.")
 
 # Sidebar
 st.sidebar.header("ℹ️ Como Usar")
