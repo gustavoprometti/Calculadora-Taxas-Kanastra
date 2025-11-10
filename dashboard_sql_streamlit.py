@@ -604,36 +604,67 @@ if 'df' in st.session_state:
     with col3:
         download_csv = df.to_csv(index=False).encode('utf-8')
         
-        # Botão de exportar CSV
-        csv_button_clicked = st.download_button(
-            label="📥 Exportar CSV",
-            data=download_csv,
-            file_name=f'calculadora_taxas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-            mime='text/csv',
-            type="primary",
-            use_container_width=True
-        )
-        
-        # Se há waiver aplicado e botão foi clicado, salvar no BigQuery
-        if csv_button_clicked and 'waiver_aplicado' in st.session_state:
-            waiver_data = st.session_state['waiver_aplicado']
-            fundos = waiver_data['fundos']
-            valores = waiver_data['valores']
-            tipos = waiver_data['tipos']
-            
-            sucesso_total = True
-            for fundo in fundos:
-                valor = valores.get(fundo, 0)
-                tipo = tipos.get(fundo, "Provisionado")
+        # Botão de exportar CSV com salvamento de waiver
+        # Usar on_click para salvar waiver ANTES do download
+        if 'waiver_aplicado' in st.session_state:
+            # Callback para salvar waiver
+            def salvar_waiver_callback():
+                waiver_data = st.session_state['waiver_aplicado']
+                fundos = waiver_data['fundos']
+                valores = waiver_data['valores']
+                tipos = waiver_data['tipos']
                 
-                if valor > 0:
-                    if not salvar_waiver_bigquery(fundo, valor, tipo, data_inicio, data_fim):
-                        sucesso_total = False
+                sucesso_total = True
+                mensagens = []
+                
+                for fundo in fundos:
+                    valor = valores.get(fundo, 0)
+                    tipo = tipos.get(fundo, "Provisionado")
+                    
+                    if valor > 0:
+                        st.write(f"🔄 Salvando waiver: {fundo} - R$ {valor:,.2f} - {tipo}")
+                        if salvar_waiver_bigquery(fundo, valor, tipo, data_inicio, data_fim):
+                            mensagens.append(f"✅ {fundo}: R$ {valor:,.2f} salvo!")
+                        else:
+                            sucesso_total = False
+                            mensagens.append(f"❌ {fundo}: Erro ao salvar")
+                
+                st.session_state['waiver_salvo_mensagens'] = mensagens
+                st.session_state['waiver_salvo_sucesso'] = sucesso_total
             
-            if sucesso_total:
-                st.success("✅ CSV exportado e histórico de waiver salvo no BigQuery!")
-            else:
-                st.warning("⚠️ CSV exportado, mas houve erro ao salvar histórico de waiver no BigQuery")
+            # Botão com callback
+            st.download_button(
+                label="📥 Exportar CSV + Salvar Waiver",
+                data=download_csv,
+                file_name=f'calculadora_taxas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                mime='text/csv',
+                type="primary",
+                use_container_width=True,
+                on_click=salvar_waiver_callback
+            )
+            
+            # Mostrar mensagens se houver
+            if 'waiver_salvo_mensagens' in st.session_state:
+                for msg in st.session_state['waiver_salvo_mensagens']:
+                    if "✅" in msg:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+                
+                # Limpar mensagens após mostrar
+                del st.session_state['waiver_salvo_mensagens']
+                if 'waiver_salvo_sucesso' in st.session_state:
+                    del st.session_state['waiver_salvo_sucesso']
+        else:
+            # Sem waiver, botão normal
+            st.download_button(
+                label="📥 Exportar CSV",
+                data=download_csv,
+                file_name=f'calculadora_taxas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                mime='text/csv',
+                type="primary",
+                use_container_width=True
+            )
     
     # Exibir tabela
     st.subheader("📋 Resultados da Query SQL")
