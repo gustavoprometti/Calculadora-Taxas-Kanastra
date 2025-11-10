@@ -781,11 +781,19 @@ if st.session_state.dados_editados is not None:
                 submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
             
             if submitted_buscar:
+                # VALIDAÇÃO CRÍTICA: Verificar se a coluna service_type existe
+                df = st.session_state.dados_editados
+                
+                if 'service_type' not in df.columns:
+                    st.error("❌ **ERRO: Dados incompatíveis!**")
+                    st.warning("⚠️ A tabela carregada não possui a coluna 'service_type' (taxa variável)")
+                    st.info("👉 Recarregue os dados clicando no botão '📊 Carregar Dados' no topo da página")
+                    st.stop()
+                
                 # Converter serviço para inglês
                 service_type_en = servicos_map[service_type_edit_pt]
                 
                 # Buscar todas as faixas deste cliente+serviço
-                df = st.session_state.dados_editados
                 registros = df[(df['cliente'] == cliente_edit_var) & (df['service_type'] == service_type_en)]
                 
                 if not registros.empty:
