@@ -193,10 +193,10 @@ def carregar_dados_bigquery(tabela):
             SELECT 
                 `fund id` as fund_id,
                 cliente,
-                `service type` as service_type,
-                `lower bound` as lower_bound,
-                `upper bound` as upper_bound,
-                `fee percentage` as fee_percentage
+                service_type,
+                lower_bound,
+                upper_bound,
+                fee_percentage
             FROM `kanastra-live.finance.fee_variavel`
             ORDER BY `fund id`
             """
