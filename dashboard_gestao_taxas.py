@@ -190,9 +190,15 @@ def carregar_dados_bigquery(tabela):
             """
         else:
             query = """
-            SELECT *
+            SELECT 
+                empresa,
+                `fund id` as fund_id,
+                cliente,
+                servico,
+                faixa,
+                fee_variavel
             FROM `kanastra-live.finance.fee_variavel`
-            ORDER BY `fund id`
+            ORDER BY `fund id`, faixa
             """
         
         df = client.query(query).to_dataframe()
@@ -428,9 +434,7 @@ with col2:
                 st.session_state.tabela_selecionada = tabela
                 st.success(f"✅ {len(df)} registros carregados!")
                 
-                # DEBUG: Mostrar nomes das colunas
-                if tabela == "fee_variavel":
-                    st.info(f"🔍 **DEBUG - Colunas da tabela:** {', '.join(df.columns.tolist())}")
+
             elif df is not None:
                 st.warning("⚠️ Tabela vazia")
             else:
@@ -601,14 +605,6 @@ if st.session_state.dados_editados is not None:
         if 'faixas_variavel' not in st.session_state:
             st.session_state.faixas_variavel = []
         
-        # Mapeamento de serviços em português para inglês (para o banco)
-        servicos_map = {
-            "Administração": "administration",
-            "Gestão": "management",
-            "Performance": "performance",
-            "Custódia": "custody"
-        }
-        
         with st.form("form_criar_taxa_variavel"):
             st.markdown("### 📝 Informações básicas")
             
@@ -621,14 +617,14 @@ if st.session_state.dados_editados is not None:
                 cliente_var = st.text_input("Cliente", key="var_cliente")
             
             with col3:
-                service_type_pt = st.selectbox(
-                    "Tipo de Serviço",
+                servico_var = st.selectbox(
+                    "Serviço",
                     ["Administração", "Gestão", "Performance", "Custódia"],
                     key="var_service"
                 )
             
             st.markdown("---")
-            st.markdown("### 📊 Faixas de PL e Taxas (Cascata)")
+            st.markdown("### 📊 Faixas de PL e Taxas")
             st.info("ℹ️ Será criada 1 linha no BigQuery para cada faixa. Ex: 3 faixas = 3 linhas no banco de dados")
             
             # Número de faixas
@@ -638,110 +634,55 @@ if st.session_state.dados_editados is not None:
             
             for i in range(num_faixas):
                 st.markdown(f"**Faixa {i+1}:**")
-                col_a, col_b, col_c = st.columns(3)
+                col_a, col_b = st.columns(2)
                 
                 with col_a:
-                    lower = st.number_input(
-                        f"PL Inicial (R$)", 
+                    faixa_pl = st.number_input(
+                        f"PL Mínimo (R$)", 
                         min_value=0.0, 
                         step=1000000.0, 
                         format="%.0f",
-                        key=f"lower_{i}"
+                        key=f"faixa_{i}"
                     )
                 
                 with col_b:
-                    # Se for última faixa, sugerir valor máximo
-                    default_upper = 1000000000000000.0 if i == num_faixas - 1 else 0.0
-                    upper = st.number_input(
-                        f"PL Final (R$)", 
-                        min_value=0.0, 
-                        step=1000000.0, 
-                        format="%.0f",
-                        value=default_upper,
-                        key=f"upper_{i}",
-                        help="Use 1000000000000000 para valor ilimitado"
-                    )
-                
-                with col_c:
                     fee_pct = st.number_input(
-                        f"Taxa (%)", 
+                        f"Taxa Variável (%)", 
                         min_value=0.0, 
                         max_value=100.0, 
                         step=0.0001, 
                         format="%.4f",
-                        key=f"fee_{i}"
+                        key=f"fee_var_{i}"
                     )
                 
                 faixas_data.append({
-                    "lower_bound": lower,
-                    "upper_bound": upper,
-                    "fee_percentage": fee_pct
+                    "faixa": faixa_pl,
+                    "fee_variavel": fee_pct
                 })
             
             submitted_var = st.form_submit_button("➕ Criar Taxas Variáveis", use_container_width=True, type="primary")
             
             if submitted_var:
-                # Converter serviço para inglês
-                service_type_en = servicos_map[service_type_pt]
-                
-                linhas_criadas = []
-                
-                # 1. Criar linha com limite superior máximo (primeira linha)
-                ultima_faixa = faixas_data[-1]
-                linha_max = {
-                    "fund_id": fund_id_var,
-                    "cliente": cliente_var,
-                    "service_type": service_type_en,
-                    "lower_bound": ultima_faixa["upper_bound"],  # 99999999999 ou similar
-                    "upper_bound": None,
-                    "fee_percentage": ultima_faixa["fee_percentage"],
-                    "tipo_alteracao": "INSERT",
-                    "timestamp": datetime.now()
-                }
-                linhas_criadas.append(linha_max)
-                
-                # 2. Criar linhas para cada faixa (início e fim de cada faixa)
-                for idx, faixa in enumerate(faixas_data):
-                    # Linha do início da faixa
-                    linha_inicio = {
-                        "fund_id": fund_id_var,
-                        "cliente": cliente_var,
-                        "service_type": service_type_en,
-                        "lower_bound": faixa["lower_bound"],
-                        "upper_bound": None,
-                        "fee_percentage": faixa["fee_percentage"],
-                        "tipo_alteracao": "INSERT",
-                        "timestamp": datetime.now()
-                    }
-                    linhas_criadas.append(linha_inicio)
-                    
-                    # Linha do fim da faixa (apenas se não for a última faixa)
-                    if idx < len(faixas_data) - 1:
-                        linha_fim = {
-                            "fund_id": fund_id_var,
-                            "cliente": cliente_var,
-                            "service_type": service_type_en,
-                            "lower_bound": faixa["upper_bound"],
-                            "upper_bound": None,
-                            "fee_percentage": faixa["fee_percentage"],
-                            "tipo_alteracao": "INSERT",
-                            "timestamp": datetime.now()
-                        }
-                        linhas_criadas.append(linha_fim)
-                
-                # Salvar todas as linhas no BigQuery (com usuário logado)
+                # Criar uma linha para cada faixa
                 usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
                 sucesso = True
-                for linha in linhas_criadas:
-                    # Remover campos temporários
-                    linha_limpa = {k: v for k, v in linha.items() if k not in ['tipo_alteracao', 'timestamp']}
-                    if not salvar_alteracao_pendente("INSERT", "fee_variavel", linha_limpa, usuario_atual):
+                
+                for faixa in faixas_data:
+                    nova_taxa = {
+                        "empresa": "a",
+                        "fund_id": fund_id_var,
+                        "cliente": cliente_var,
+                        "servico": servico_var,
+                        "faixa": faixa["faixa"],
+                        "fee_variavel": faixa["fee_variavel"]
+                    }
+                    
+                    if not salvar_alteracao_pendente("INSERT", "fee_variavel", nova_taxa, usuario_atual):
                         sucesso = False
                         break
                 
                 if sucesso:
-                    st.success(f"✅ {len(linhas_criadas)} linha(s) de taxa variável criada(s)! Cliente: {cliente_var} - {service_type_pt}")
-                    st.info(f"📊 {len(faixas_data)} faixas configuradas = {len(linhas_criadas)} linhas no BigQuery")
+                    st.success(f"✅ {len(faixas_data)} faixa(s) de taxa variável criada(s)! Cliente: {cliente_var} - {servico_var}")
                     st.info("⏳ Aguardando aprovação de um aprovador")
                     st.rerun()
                 else:
@@ -750,15 +691,6 @@ if st.session_state.dados_editados is not None:
     # FORMULÁRIO 4: Taxa Variável + Editar
     elif st.session_state.tabela_selecionada == "fee_variavel" and acao == "Editar Taxa Existente":
         st.subheader("✏️ Editar Taxa Variável Existente")
-        
-        # Mapeamento de serviços
-        servicos_map = {
-            "Administração": "administration",
-            "Gestão": "management",
-            "Performance": "performance",
-            "Custódia": "custody"
-            }
-        servicos_map_reverse = {v: k for k, v in servicos_map.items()}
         
         with st.form("form_editar_taxa_variavel"):
             st.markdown("### 📝 Selecione o cliente e serviço para editar todas as faixas")
@@ -776,38 +708,28 @@ if st.session_state.dados_editados is not None:
                 )
             
             with col2:
-                service_type_edit_pt = st.selectbox(
+                servico_edit_var = st.selectbox(
                     "Selecione o Serviço",
                     ["Administração", "Gestão", "Performance", "Custódia"],
                     key="edit_var_service"
                 )
             
-                submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
+            submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
             
             if submitted_buscar:
-                # VALIDAÇÃO CRÍTICA: Verificar se a coluna service_type existe
                 df = st.session_state.dados_editados
                 
-                if 'service_type' not in df.columns:
-                    st.error("❌ **ERRO: Dados incompatíveis!**")
-                    st.warning("⚠️ A tabela carregada não possui a coluna 'service_type' (taxa variável)")
-                    st.info("👉 Recarregue os dados clicando no botão '📊 Carregar Dados' no topo da página")
-                    st.stop()
-                
-                # Converter serviço para inglês
-                service_type_en = servicos_map[service_type_edit_pt]
-                
                 # Buscar todas as faixas deste cliente+serviço
-                registros = df[(df['cliente'] == cliente_edit_var) & (df['service_type'] == service_type_en)]
+                registros = df[(df['cliente'] == cliente_edit_var) & (df['servico'] == servico_edit_var)]
                 
                 if not registros.empty:
-                    # Ordenar por lower_bound
-                    registros = registros.sort_values('lower_bound')
+                    # Ordenar por faixa
+                    registros = registros.sort_values('faixa')
                     st.session_state.faixas_var_para_editar = registros.to_dict('records')
                     st.success(f"✅ {len(registros)} faixas encontradas! Atualize os valores abaixo.")
                     st.rerun()
                 else:
-                    st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {service_type_edit_pt}")
+                    st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {servico_edit_var}")
         
         # Se há faixas carregadas, mostrar formulário de edição
         if 'faixas_var_para_editar' in st.session_state and st.session_state.faixas_var_para_editar:
@@ -821,50 +743,37 @@ if st.session_state.dados_editados is not None:
                 
                 for idx, faixa in enumerate(st.session_state.faixas_var_para_editar):
                     st.markdown(f"**Linha {idx + 1}:**")
-                    col_a, col_b, col_c = st.columns(3)
+                    col_a, col_b = st.columns(2)
                     
                     with col_a:
-                        lower_edit = st.number_input(
-                            f"PL Inicial (R$)",
-                            value=float(faixa['lower_bound']),
+                        faixa_edit = st.number_input(
+                            f"Faixa (PL Mínimo R$)",
+                            value=float(faixa['faixa']),
                             min_value=0.0,
                             step=1000000.0,
                             format="%.0f",
-                            key=f"edit_lower_{idx}"
+                            key=f"edit_faixa_{idx}"
                         )
                     
                     with col_b:
-                        # upper_bound pode ser None para algumas linhas
-                        upper_val = float(faixa.get('upper_bound', 0)) if faixa.get('upper_bound') is not None else 0.0
-                        upper_edit = st.number_input(
-                            f"PL Final (R$)",
-                            value=upper_val,
-                            min_value=0.0,
-                            step=1000000.0,
-                            format="%.0f",
-                            key=f"edit_upper_{idx}",
-                            help="Deixe 0 se não aplicável"
-                        )
-                    
-                    with col_c:
                         fee_edit = st.number_input(
-                            f"Taxa (%)",
-                            value=float(faixa['fee_percentage']),
+                            f"Taxa Variável (%)",
+                            value=float(faixa['fee_variavel']),
                             min_value=0.0,
                             max_value=100.0,
                             step=0.0001,
                             format="%.4f",
-                            key=f"edit_fee_{idx}"
+                            key=f"edit_fee_var_{idx}"
                         )
                     
                     faixas_editadas.append({
+                        "empresa": faixa['empresa'],
                         "fund_id": int(faixa['fund_id']),
                         "cliente": faixa['cliente'],
-                        "service_type": faixa['service_type'],
-                        "lower_bound": lower_edit,
-                        "upper_bound": upper_edit if upper_edit > 0 else None,
-                        "fee_percentage": fee_edit,
-                        "original_lower": float(faixa['lower_bound'])  # Para identificar qual linha atualizar
+                        "servico": faixa['servico'],
+                        "faixa": faixa_edit,
+                        "fee_variavel": fee_edit,
+                        "original_faixa": float(faixa['faixa'])  # Para identificar qual linha atualizar
                     })
                 
                 st.markdown("---")
@@ -880,19 +789,10 @@ if st.session_state.dados_editados is not None:
                 if submitted_update:
                     # Salvar todas as faixas editadas no BigQuery
                     sucesso = True
+                    usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                    
                     for faixa_edit in faixas_editadas:
-                        taxa_var_editada = {
-                            "fund_id": faixa_edit["fund_id"],
-                            "cliente": faixa_edit["cliente"],
-                            "service_type": faixa_edit["service_type"],
-                            "lower_bound": faixa_edit["lower_bound"],
-                            "upper_bound": faixa_edit["upper_bound"],
-                            "fee_percentage": faixa_edit["fee_percentage"],
-                            "original_lower": faixa_edit["original_lower"]  # Para WHERE clause
-                        }
-                        
-                        usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
-                        if not salvar_alteracao_pendente("UPDATE", "fee_variavel", taxa_var_editada, usuario_atual):
+                        if not salvar_alteracao_pendente("UPDATE", "fee_variavel", faixa_edit, usuario_atual):
                             sucesso = False
                             break
                     
@@ -925,13 +825,10 @@ if st.session_state.dados_editados is not None:
         cliente_filtro = st.selectbox("🔍 Filtrar por Cliente", clientes_unicos, key="filtro_cliente")
     
     with col_filtro2:
-        # Filtro por serviço (adapta ao tipo de tabela)
-        if st.session_state.tabela_selecionada == "fee_minimo" and 'servico' in st.session_state.dados_editados.columns:
+        # Filtro por serviço
+        if 'servico' in st.session_state.dados_editados.columns:
             servicos_unicos = ["Todos"] + sorted(st.session_state.dados_editados['servico'].unique().tolist())
             servico_filtro = st.selectbox("🔍 Filtrar por Serviço", servicos_unicos, key="filtro_servico")
-        elif st.session_state.tabela_selecionada == "fee_variavel" and 'service_type' in st.session_state.dados_editados.columns:
-            servicos_unicos = ["Todos"] + sorted(st.session_state.dados_editados['service_type'].unique().tolist())
-            servico_filtro = st.selectbox("🔍 Filtrar por Service Type", servicos_unicos, key="filtro_service_type")
         else:
             servico_filtro = "Todos"
     
@@ -947,10 +844,7 @@ if st.session_state.dados_editados is not None:
         df_filtrado = df_filtrado[df_filtrado['cliente'] == cliente_filtro]
     
     if servico_filtro != "Todos":
-        if st.session_state.tabela_selecionada == "fee_minimo":
-            df_filtrado = df_filtrado[df_filtrado['servico'] == servico_filtro]
-        else:
-            df_filtrado = df_filtrado[df_filtrado['service_type'] == servico_filtro]
+        df_filtrado = df_filtrado[df_filtrado['servico'] == servico_filtro]
     
     st.info(f"**{len(df_filtrado)}** de **{len(st.session_state.dados_editados)}** registros exibidos")
     
@@ -961,8 +855,6 @@ if st.session_state.dados_editados is not None:
         height=400
     )
 
-# =======================
-# SEÇÃO 5: PAINEL DE APROVAÇÃO
 # =======================
 
 st.markdown("---")
@@ -1063,7 +955,7 @@ if alteracoes_filtradas:
                             # Gerar SQL UPDATE
                             set_clause = []
                             for k, v in dados.items():
-                                if k not in ['fund_id', 'cliente', 'service_type', 'servico', 'empresa', 'original_lower']:  # Não atualizar chaves
+                                if k not in ['fund_id', 'cliente', 'servico', 'empresa', 'original_faixa', 'original_lower']:  # Não atualizar chaves
                                     if v is None:
                                         set_clause.append(f"{k} = NULL")
                                     elif isinstance(v, str):
@@ -1075,10 +967,10 @@ if alteracoes_filtradas:
                             
                             # WHERE clause baseado na tabela
                             if tabela == "fee_minimo":
-                                where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}'"
+                                where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}' AND faixa = {dados.get('original_lower', dados['faixa'])}"
                             else:  # fee_variavel
-                                original_lower = dados.get('original_lower', dados['lower_bound'])
-                                where = f"`fund id` = {dados['fund_id']} AND service_type = '{dados['service_type']}' AND lower_bound = {original_lower}"
+                                original_faixa = dados.get('original_faixa', dados.get('original_lower', dados['faixa']))
+                                where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}' AND faixa = {original_faixa}"
                             
                             sql = f"""
                             UPDATE `kanastra-live.finance.{tabela}`
