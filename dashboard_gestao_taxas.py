@@ -989,91 +989,95 @@ if alteracoes_filtradas:
         df_alteracao = pd.DataFrame([dados])
         st.dataframe(df_alteracao, use_container_width=True, hide_index=True)
         
-        # Botões de aprovação individual
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.button(f"✅ Aprovar #{idx + 1}", key=f"aprovar_{idx}", use_container_width=True, type="primary"):
+        # Botões de aprovação individual (APENAS PARA APROVADORES)
+        if perfil == "aprovador":
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                if st.button(f"✅ Aprovar #{idx + 1}", key=f"aprovar_{idx}", use_container_width=True, type="primary"):
                 # Executar INSERT ou UPDATE no BigQuery
-                try:
-                    client = get_bigquery_client()
-                    tabela = alteracao['tabela']
-                    dados = alteracao['dados']
-                    
-                    if alteracao['tipo_alteracao'] == "INSERT":
-                        # Gerar SQL INSERT
-                        colunas = [k for k in dados.keys()]
-                        valores = []
-                        for k in colunas:
-                            v = dados[k]
-                            if v is None:
-                                valores.append("NULL")
-                            elif isinstance(v, str):
-                                valores.append(f"'{v}'")
-                            elif isinstance(v, (int, float)):
-                                valores.append(str(v))
-                            else:
-                                valores.append(f"'{str(v)}'")
+                    try:
+                        client = get_bigquery_client()
+                        tabela = alteracao['tabela']
+                        dados = alteracao['dados']
                         
-                        # Mapear fund_id para `fund id` com backticks
-                        colunas_sql = [f"`fund id`" if c == "fund_id" else c for c in colunas]
-                        
-                        sql = f"""
-                        INSERT INTO `kanastra-live.finance.{tabela}` 
-                        ({', '.join(colunas_sql)})
-                        VALUES ({', '.join(valores)})
-                        """
-                        
-                    else:  # UPDATE
-                        # Gerar SQL UPDATE
-                        set_clause = []
-                        for k, v in dados.items():
-                            if k not in ['fund_id', 'cliente', 'service_type', 'servico', 'empresa', 'original_lower']:  # Não atualizar chaves
+                        if alteracao['tipo_alteracao'] == "INSERT":
+                            # Gerar SQL INSERT
+                            colunas = [k for k in dados.keys()]
+                            valores = []
+                            for k in colunas:
+                                v = dados[k]
                                 if v is None:
-                                    set_clause.append(f"{k} = NULL")
+                                    valores.append("NULL")
                                 elif isinstance(v, str):
-                                    set_clause.append(f"{k} = '{v}'")
+                                    valores.append(f"'{v}'")
                                 elif isinstance(v, (int, float)):
-                                    set_clause.append(f"{k} = {v}")
+                                    valores.append(str(v))
                                 else:
-                                    set_clause.append(f"{k} = '{str(v)}'")
+                                    valores.append(f"'{str(v)}'")
+                            
+                            # Mapear fund_id para `fund id` com backticks
+                            colunas_sql = [f"`fund id`" if c == "fund_id" else c for c in colunas]
+                            
+                            sql = f"""
+                            INSERT INTO `kanastra-live.finance.{tabela}` 
+                            ({', '.join(colunas_sql)})
+                            VALUES ({', '.join(valores)})
+                            """
+                            
+                        else:  # UPDATE
+                            # Gerar SQL UPDATE
+                            set_clause = []
+                            for k, v in dados.items():
+                                if k not in ['fund_id', 'cliente', 'service_type', 'servico', 'empresa', 'original_lower']:  # Não atualizar chaves
+                                    if v is None:
+                                        set_clause.append(f"{k} = NULL")
+                                    elif isinstance(v, str):
+                                        set_clause.append(f"{k} = '{v}'")
+                                    elif isinstance(v, (int, float)):
+                                        set_clause.append(f"{k} = {v}")
+                                    else:
+                                        set_clause.append(f"{k} = '{str(v)}'")
+                            
+                            # WHERE clause baseado na tabela
+                            if tabela == "fee_minimo":
+                                where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}'"
+                            else:  # fee_variavel
+                                original_lower = dados.get('original_lower', dados['lower_bound'])
+                                where = f"`fund id` = {dados['fund_id']} AND service_type = '{dados['service_type']}' AND lower_bound = {original_lower}"
+                            
+                            sql = f"""
+                            UPDATE `kanastra-live.finance.{tabela}`
+                            SET {', '.join(set_clause)}
+                            WHERE {where}
+                            """
                         
-                        # WHERE clause baseado na tabela
-                        if tabela == "fee_minimo":
-                            where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}'"
-                        else:  # fee_variavel
-                            original_lower = dados.get('original_lower', dados['lower_bound'])
-                            where = f"`fund id` = {dados['fund_id']} AND service_type = '{dados['service_type']}' AND lower_bound = {original_lower}"
+                        # Executar query
+                        st.code(sql, language="sql")
+                        query_job = client.query(sql)
+                        query_job.result()
                         
-                        sql = f"""
-                        UPDATE `kanastra-live.finance.{tabela}`
-                        SET {', '.join(set_clause)}
-                        WHERE {where}
-                        """
-                    
-                    # Executar query
-                    st.code(sql, language="sql")
-                    query_job = client.query(sql)
-                    query_job.result()
-                    
-                    # Atualizar status no BigQuery com aprovador
+                        # Atualizar status no BigQuery com aprovador
+                        aprovador = st.session_state.usuario_aprovador
+                        if atualizar_status_alteracao(alteracao['id'], 'APROVADO', aprovador):
+                            st.success(f"✅ Alteração #{idx + 1} aprovada por {aprovador} e aplicada no BigQuery!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Erro ao atualizar status da alteração")
+                        
+                    except Exception as e:
+                        st.error(f"❌ Erro ao aplicar alteração: {str(e)}")
+            
+            with col_btn2:
+                if st.button(f"❌ Rejeitar #{idx + 1}", key=f"rejeitar_{idx}", use_container_width=True):
                     aprovador = st.session_state.usuario_aprovador
-                    if atualizar_status_alteracao(alteracao['id'], 'APROVADO', aprovador):
-                        st.success(f"✅ Alteração #{idx + 1} aprovada por {aprovador} e aplicada no BigQuery!")
+                    if atualizar_status_alteracao(alteracao['id'], 'REJEITADO', aprovador):
+                        st.warning(f"⚠️ Alteração #{idx + 1} rejeitada por {aprovador}!")
                         st.rerun()
                     else:
-                        st.error("❌ Erro ao atualizar status da alteração")
-                    
-                except Exception as e:
-                    st.error(f"❌ Erro ao aplicar alteração: {str(e)}")
-        
-        with col_btn2:
-            if st.button(f"❌ Rejeitar #{idx + 1}", key=f"rejeitar_{idx}", use_container_width=True):
-                aprovador = st.session_state.usuario_aprovador
-                if atualizar_status_alteracao(alteracao['id'], 'REJEITADO', aprovador):
-                    st.warning(f"⚠️ Alteração #{idx + 1} rejeitada por {aprovador}!")
-                    st.rerun()
-                else:
-                    st.error("❌ Erro ao rejeitar alteração")
+                        st.error("❌ Erro ao rejeitar alteração")
+        else:
+            # Editores apenas visualizam, não podem aprovar
+            st.info("⏳ Aguardando aprovação de um aprovador")
         
         st.markdown("---")
     else:
