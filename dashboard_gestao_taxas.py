@@ -417,6 +417,9 @@ with col1:
 
 with col2:
     if st.button("📊 Carregar Dados", use_container_width=True, type="primary"):
+        # Limpar cache antes de carregar novos dados
+        carregar_dados_bigquery.clear()
+        
         with st.spinner("Carregando..."):
             df = carregar_dados_bigquery(tabela)
             if df is not None and not df.empty:
