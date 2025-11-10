@@ -726,10 +726,16 @@ if st.session_state.dados_editados is not None:
     elif st.session_state.tabela_selecionada == "fee_variavel" and acao == "Editar Taxa Existente":
         st.subheader("✏️ Editar Taxa Variável Existente")
         
-        # Verificar se dados foram carregados
+        # Verificar se dados foram carregados E se é a tabela correta
         if st.session_state.dados_editados is None:
             st.warning("⚠️ **Por favor, carregue os dados primeiro!**")
             st.info("👆 Use o botão '📊 Carregar Dados' acima para carregar a tabela Taxa Variável")
+        elif st.session_state.tabela_selecionada != "fee_variavel":
+            st.error("❌ **Você precisa carregar a tabela Taxa Variável para editar taxas variáveis!**")
+            st.info("👆 Selecione 'Taxa Variável' acima e clique em '📊 Carregar Dados'")
+        elif 'service_type' not in st.session_state.dados_editados.columns:
+            st.error("❌ **Dados carregados não correspondem à Taxa Variável!**")
+            st.info("👆 Recarregue os dados selecionando 'Taxa Variável' e clicando em '📊 Carregar Dados'")
         else:
             # Mapeamento de serviços
             servicos_map = {
@@ -765,27 +771,21 @@ if st.session_state.dados_editados is not None:
                     submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
                 
                 if submitted_buscar:
-                    # Verificar se dados foram carregados
-                    if st.session_state.dados_editados is None:
-                        st.error("❌ Por favor, carregue os dados primeiro usando o botão '📊 Carregar Dados'")
-                    elif st.session_state.tabela_selecionada != "fee_variavel":
-                        st.error("❌ Esta opção é apenas para Taxa Variável. Selecione a tabela correta.")
+                    # Converter serviço para inglês
+                    service_type_en = servicos_map[service_type_edit_pt]
+                    
+                    # Buscar todas as faixas deste cliente+serviço
+                    df = st.session_state.dados_editados
+                    registros = df[(df['cliente'] == cliente_edit_var) & (df['service_type'] == service_type_en)]
+                    
+                    if not registros.empty:
+                        # Ordenar por lower_bound
+                        registros = registros.sort_values('lower_bound')
+                        st.session_state.faixas_var_para_editar = registros.to_dict('records')
+                        st.success(f"✅ {len(registros)} faixas encontradas! Atualize os valores abaixo.")
+                        st.rerun()
                     else:
-                        # Converter serviço para inglês
-                        service_type_en = servicos_map[service_type_edit_pt]
-                        
-                        # Buscar todas as faixas deste cliente+serviço
-                        df = st.session_state.dados_editados
-                        registros = df[(df['cliente'] == cliente_edit_var) & (df['service_type'] == service_type_en)]
-                        
-                        if not registros.empty:
-                            # Ordenar por lower_bound
-                            registros = registros.sort_values('lower_bound')
-                            st.session_state.faixas_var_para_editar = registros.to_dict('records')
-                            st.success(f"✅ {len(registros)} faixas encontradas! Atualize os valores abaixo.")
-                            st.rerun()
-                        else:
-                            st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {service_type_edit_pt}")
+                        st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {service_type_edit_pt}")
             
             # Se há faixas carregadas, mostrar formulário de edição
             if 'faixas_var_para_editar' in st.session_state and st.session_state.faixas_var_para_editar:
