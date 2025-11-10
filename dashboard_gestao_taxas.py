@@ -541,6 +541,7 @@ if st.session_state.dados_editados is not None:
             
             if submitted_edit:
                 # Buscar o registro pelo cliente e serviço
+                df = st.session_state.dados_editados
                 registro = df[(df['cliente'] == cliente_edit) & (df['servico'] == servico_edit)]
                 
                 if not registro.empty:
@@ -759,20 +760,27 @@ if st.session_state.dados_editados is not None:
             submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
             
             if submitted_buscar:
-                # Converter serviço para inglês
-                service_type_en = servicos_map[service_type_edit_pt]
-                
-                # Buscar todas as faixas deste cliente+serviço
-                registros = df[(df['cliente'] == cliente_edit_var) & (df['service_type'] == service_type_en)]
-                
-                if not registros.empty:
-                    # Ordenar por lower_bound
-                    registros = registros.sort_values('lower_bound')
-                    st.session_state.faixas_var_para_editar = registros.to_dict('records')
-                    st.success(f"✅ {len(registros)} faixas encontradas! Atualize os valores abaixo.")
-                    st.rerun()
+                # Verificar se dados foram carregados
+                if st.session_state.dados_editados is None:
+                    st.error("❌ Por favor, carregue os dados primeiro usando o botão '📊 Carregar Dados'")
+                elif st.session_state.tabela_selecionada != "fee_variavel":
+                    st.error("❌ Esta opção é apenas para Taxa Variável. Selecione a tabela correta.")
                 else:
-                    st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {service_type_edit_pt}")
+                    # Converter serviço para inglês
+                    service_type_en = servicos_map[service_type_edit_pt]
+                    
+                    # Buscar todas as faixas deste cliente+serviço
+                    df = st.session_state.dados_editados
+                    registros = df[(df['cliente'] == cliente_edit_var) & (df['service_type'] == service_type_en)]
+                    
+                    if not registros.empty:
+                        # Ordenar por lower_bound
+                        registros = registros.sort_values('lower_bound')
+                        st.session_state.faixas_var_para_editar = registros.to_dict('records')
+                        st.success(f"✅ {len(registros)} faixas encontradas! Atualize os valores abaixo.")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {service_type_edit_pt}")
         
         # Se há faixas carregadas, mostrar formulário de edição
         if 'faixas_var_para_editar' in st.session_state and st.session_state.faixas_var_para_editar:
