@@ -190,7 +190,13 @@ def carregar_dados_bigquery(tabela):
             """
         else:
             query = """
-            SELECT *
+            SELECT 
+                `fund id` as fund_id,
+                cliente,
+                `service type` as service_type,
+                `lower bound` as lower_bound,
+                `upper bound` as upper_bound,
+                `fee percentage` as fee_percentage
             FROM `kanastra-live.finance.fee_variavel`
             ORDER BY `fund id`
             """
