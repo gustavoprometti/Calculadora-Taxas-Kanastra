@@ -1393,7 +1393,7 @@ elif aba_selecionada == "💰 Waivers":
     
     @st.cache_data(ttl=300)
     def carregar_historico_waivers():
-        """Carrega histórico de waivers do BigQuery"""
+        """Carrega histórico de waivers do BigQuery (tabela finance.descontos)"""
         try:
             client = get_bigquery_client()
             query = """
@@ -1402,19 +1402,23 @@ elif aba_selecionada == "💰 Waivers":
                 data_aplicacao,
                 usuario,
                 fund_name,
-                valor_waiver,
-                tipo_waiver,
+                valor_desconto as valor_waiver,
+                tipo_desconto,
+                percentual_desconto,
+                forma_aplicacao,
                 data_inicio,
                 data_fim,
+                servico,
                 observacao
-            FROM `kanastra-live.finance.historico_waivers`
+            FROM `kanastra-live.finance.descontos`
+            WHERE categoria = 'waiver'
             ORDER BY data_aplicacao DESC
             LIMIT 100
             """
             df = client.query(query).to_dataframe()
             return df
         except Exception as e:
-            st.warning(f"⚠️ Tabela de waivers ainda não existe ou erro: {e}")
+            st.warning(f"⚠️ Erro ao carregar waivers: {e}")
             return pd.DataFrame()
     
     df_waivers = carregar_historico_waivers()
@@ -1432,9 +1436,10 @@ elif aba_selecionada == "💰 Waivers":
         
         with col_filtro2:
             tipo_filtro = st.selectbox(
-                "Filtrar por Tipo:",
-                ["Todos", "Provisionado", "Não Provisionado"],
-                key="filtro_tipo_waiver"
+                "Filtrar por Forma de Aplicação:",
+                ["Todos", "Provisionado", "Nao_Provisionado"],
+                key="filtro_tipo_waiver",
+                format_func=lambda x: "Todos" if x == "Todos" else ("Provisionado (Distribuído)" if x == "Provisionado" else "Não Provisionado (Último)")
             )
         
         # Aplicar filtros
@@ -1444,7 +1449,7 @@ elif aba_selecionada == "💰 Waivers":
             df_filtrado = df_filtrado[df_filtrado['fund_name'].isin(fundos_filtro)]
         
         if tipo_filtro != "Todos":
-            df_filtrado = df_filtrado[df_filtrado['tipo_waiver'] == tipo_filtro]
+            df_filtrado = df_filtrado[df_filtrado['forma_aplicacao'] == tipo_filtro]
         
         st.info(f"📊 Exibindo **{len(df_filtrado)}** de **{len(df_waivers)}** waivers")
         
@@ -1458,10 +1463,13 @@ elif aba_selecionada == "💰 Waivers":
                 "data_aplicacao": st.column_config.DatetimeColumn("Data Aplicação", format="DD/MM/YYYY HH:mm"),
                 "usuario": "Usuário",
                 "fund_name": "Fundo",
-                "valor_waiver": st.column_config.NumberColumn("Valor", format="R$ %.2f"),
-                "tipo_waiver": "Tipo",
-                "data_inicio": st.column_config.DateColumn("Início", format="DD/MM/YYYY"),
-                "data_fim": st.column_config.DateColumn("Fim", format="DD/MM/YYYY"),
+                "servico": "Serviço",
+                "tipo_desconto": st.column_config.TextColumn("Tipo", help="Fixo ou Percentual"),
+                "valor_waiver": st.column_config.NumberColumn("Valor Base", format="R$ %.2f"),
+                "percentual_desconto": st.column_config.NumberColumn("Percentual", format="%.1f%%"),
+                "forma_aplicacao": st.column_config.TextColumn("Forma Aplicação", help="Provisionado = Distribuído, Nao_Provisionado = Último registro"),
+                "data_inicio": st.column_config.DateColumn("📅 Início Vigência", format="DD/MM/YYYY"),
+                "data_fim": st.column_config.DateColumn("📅 Fim Vigência", format="DD/MM/YYYY"),
                 "observacao": "Observação"
             }
         )
