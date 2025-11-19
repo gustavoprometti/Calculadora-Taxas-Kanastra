@@ -207,6 +207,29 @@ def carregar_dados_bigquery(tabela):
         st.error(f"❌ Erro ao carregar dados: {e}")
         return None
 
+@st.cache_data(ttl=3600)
+def carregar_fundos_completos():
+    """Carrega lista de fundos com ID, nome e CNPJ para criação de taxas"""
+    try:
+        client = get_bigquery_client()
+        if client is None:
+            return pd.DataFrame()
+        
+        query = """
+        SELECT 
+            id as fund_id,
+            name as fund_name,
+            government_id as cnpj
+        FROM `kanastra-live.hub.funds` 
+        WHERE name IS NOT NULL 
+        ORDER BY name
+        """
+        df = client.query(query).to_dataframe()
+        return df
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar fundos completos: {e}")
+        return pd.DataFrame()
+
 # Funções para persistência de alterações pendentes
 def salvar_alteracao_pendente(tipo_alteracao, tabela, dados, usuario="usuario_kanastra", solicitacao_id=None):
     """Salva uma alteração pendente no BigQuery"""
@@ -254,20 +277,57 @@ def carregar_alteracoes_pendentes():
         return []
     
     try:
-        query = """
-        SELECT 
-            id,
-            usuario,
-            timestamp,
-            tipo_alteracao,
-            tabela,
-            dados,
-            status,
-            solicitacao_id
-        FROM `kanastra-live.finance.alteracoes_pendentes`
-        WHERE status = 'PENDENTE'
-        ORDER BY timestamp ASC, solicitacao_id
+        # Primeiro, tentar adicionar a coluna solicitacao_id se não existir
+        try:
+            alter_query = """
+            ALTER TABLE `kanastra-live.finance.alteracoes_pendentes`
+            ADD COLUMN IF NOT EXISTS solicitacao_id STRING
+            """
+            client.query(alter_query).result()
+        except:
+            pass  # Coluna já existe ou erro ao adicionar
+        
+        # Verificar se a coluna existe antes de consultar
+        check_query = """
+        SELECT column_name 
+        FROM `kanastra-live.finance.INFORMATION_SCHEMA.COLUMNS`
+        WHERE table_name = 'alteracoes_pendentes'
         """
+        columns_df = client.query(check_query).to_dataframe()
+        has_solicitacao_id = 'solicitacao_id' in columns_df['column_name'].values
+        
+        # Montar query baseado na existência da coluna
+        if has_solicitacao_id:
+            query = """
+            SELECT 
+                id,
+                usuario,
+                timestamp,
+                tipo_alteracao,
+                tabela,
+                dados,
+                status,
+                solicitacao_id
+            FROM `kanastra-live.finance.alteracoes_pendentes`
+            WHERE status = 'PENDENTE'
+            ORDER BY timestamp ASC, solicitacao_id
+            """
+        else:
+            # Fallback: usar id como solicitacao_id se a coluna não existir
+            query = """
+            SELECT 
+                id,
+                usuario,
+                timestamp,
+                tipo_alteracao,
+                tabela,
+                dados,
+                status,
+                id as solicitacao_id
+            FROM `kanastra-live.finance.alteracoes_pendentes`
+            WHERE status = 'PENDENTE'
+            ORDER BY timestamp ASC
+            """
         
         df = client.query(query).to_dataframe()
         
@@ -959,27 +1019,6 @@ elif aba_selecionada == "💰 Waivers":
         except Exception as e:
             st.error(f"❌ Erro ao carregar fundos: {e}")
             return []
-    
-    @st.cache_data(ttl=3600)
-    def carregar_fundos_completos():
-        """Carrega lista de fundos com ID, nome e CNPJ para criação de taxas"""
-        try:
-            client = get_bigquery_client()
-            query = """
-            SELECT 
-                id as fund_id,
-                name as fund_name,
-                government_id as cnpj
-            FROM `kanastra-live.hub.funds` 
-            WHERE name IS NOT NULL 
-            ORDER BY name
-            """
-            df = client.query(query).to_dataframe()
-            return df
-        except Exception as e:
-            st.error(f"❌ Erro ao carregar fundos completos: {e}")
-            return pd.DataFrame()
-
     
     # Seção: Criar Novo Waiver
     st.subheader("➕ Criar Novo Waiver")
