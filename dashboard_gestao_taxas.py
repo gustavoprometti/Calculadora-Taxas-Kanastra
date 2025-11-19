@@ -919,26 +919,30 @@ elif aba_selecionada == "💰 Waivers":
     # Seção: Criar Novo Waiver
     st.subheader("➕ Criar Novo Waiver")
     
-    with st.form("form_criar_waiver"):
-        st.markdown("### 📝 Preencha os dados do waiver")
-        st.info("ℹ️ O waiver será submetido para aprovação antes de ser aplicado.")
-        
-        # Carregar fundos
-        fundos_disponiveis = carregar_fundos_disponiveis()
-        
-        # Seleção de fundos
-        fundos_selecionados = st.multiselect(
-            "🏢 Selecione os fundos para aplicar o waiver:",
-            fundos_disponiveis,
-            help="Escolha um ou mais fundos"
-        )
-        
-        waivers_data = []
-        
-        if fundos_selecionados:
+    # Carregar fundos FORA do formulário
+    fundos_disponiveis = carregar_fundos_disponiveis()
+    
+    # Seleção de fundos FORA do formulário
+    fundos_selecionados = st.multiselect(
+        "🏢 Selecione os fundos para aplicar o waiver:",
+        fundos_disponiveis,
+        help="Escolha um ou mais fundos",
+        key="fundos_waiver_select"
+    )
+    
+    if not fundos_selecionados:
+        st.info("👆 Selecione pelo menos um fundo para configurar o waiver")
+    else:
+        # Mostrar formulário APENAS se houver fundos selecionados
+        with st.form("form_criar_waiver"):
+            st.markdown("### 📝 Configure o waiver para os fundos selecionados")
+            st.info(f"✅ {len(fundos_selecionados)} fundo(s) selecionado(s). O waiver será submetido para aprovação.")
+            
             st.markdown("---")
-            st.markdown("### 💰 Configure o valor e tipo para cada fundo")
+            st.markdown("### 💰 Valor e Tipo para cada fundo")
             st.caption("Para cada fundo selecionado, defina o valor do waiver e se será provisionado ou não.")
+            
+            waivers_data = []
             
             for idx, fundo in enumerate(fundos_selecionados, 1):
                 st.markdown(f"#### {idx}. {fundo}")
@@ -978,67 +982,63 @@ elif aba_selecionada == "💰 Waivers":
                 })
                 
                 st.divider()
-        else:
-            st.warning("⚠️ Selecione pelo menos um fundo para continuar")
-        
-        # Datas do período
-        st.markdown("### 📅 Período de Aplicação")
-        col_data1, col_data2 = st.columns(2)
-        
-        with col_data1:
-            data_inicio_waiver = st.date_input(
-                "Data Início:",
-                value=datetime.now().date(),
-                key="data_inicio_waiver"
+            
+            # Datas do período
+            st.markdown("### 📅 Período de Aplicação")
+            col_data1, col_data2 = st.columns(2)
+            
+            with col_data1:
+                data_inicio_waiver = st.date_input(
+                    "Data Início:",
+                    value=datetime.now().date(),
+                    key="data_inicio_waiver"
+                )
+            
+            with col_data2:
+                data_fim_waiver = st.date_input(
+                    "Data Fim:",
+                    value=datetime.now().date(),
+                    key="data_fim_waiver"
+                )
+            
+            # Observação
+            observacao_waiver = st.text_area(
+                "Observação (opcional):",
+                placeholder="Digite informações adicionais sobre este waiver...",
+                key="obs_waiver"
             )
-        
-        with col_data2:
-            data_fim_waiver = st.date_input(
-                "Data Fim:",
-                value=datetime.now().date(),
-                key="data_fim_waiver"
-            )
-        
-        # Observação
-        observacao_waiver = st.text_area(
-            "Observação (opcional):",
-            placeholder="Digite informações adicionais sobre este waiver...",
-            key="obs_waiver"
-        )
-        
-        submitted_waiver = st.form_submit_button("➕ Criar Waiver", use_container_width=True, type="primary")
-        
-        if submitted_waiver:
-            if not fundos_selecionados:
-                st.error("❌ Selecione pelo menos um fundo!")
-            elif any(w['valor_waiver'] <= 0 for w in waivers_data):
-                st.error("❌ Todos os valores devem ser maiores que zero!")
-            else:
-                # Salvar cada waiver como alteração pendente
-                usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
-                sucesso = True
-                
-                for waiver in waivers_data:
-                    if waiver['valor_waiver'] > 0:
-                        dados_waiver = {
-                            "fund_name": waiver['fund_name'],
-                            "valor_waiver": waiver['valor_waiver'],
-                            "tipo_waiver": waiver['tipo_waiver'],
-                            "data_inicio": data_inicio_waiver.strftime('%Y-%m-%d'),
-                            "data_fim": data_fim_waiver.strftime('%Y-%m-%d'),
-                            "observacao": observacao_waiver or "Criado via Dashboard"
-                        }
-                        
-                        if not salvar_alteracao_pendente("INSERT", "waiver", dados_waiver, usuario_atual):
-                            sucesso = False
-                            break
-                
-                if sucesso:
-                    st.success(f"✅ {len([w for w in waivers_data if w['valor_waiver'] > 0])} waiver(s) criado(s) e enviado(s) para aprovação!")
-                    st.info("⏳ Aguardando aprovação de um aprovador")
-                    st.rerun()
+            
+            submitted_waiver = st.form_submit_button("➕ Criar Waiver", use_container_width=True, type="primary")
+            
+            if submitted_waiver:
+                if any(w['valor_waiver'] <= 0 for w in waivers_data):
+                    st.error("❌ Todos os valores devem ser maiores que zero!")
                 else:
-                    st.error("❌ Erro ao salvar um ou mais waivers")
+                    # Salvar cada waiver como alteração pendente
+                    usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                    sucesso = True
+                    
+                    for waiver in waivers_data:
+                        if waiver['valor_waiver'] > 0:
+                            dados_waiver = {
+                                "fund_name": waiver['fund_name'],
+                                "valor_waiver": waiver['valor_waiver'],
+                                "tipo_waiver": waiver['tipo_waiver'],
+                                "data_inicio": data_inicio_waiver.strftime('%Y-%m-%d'),
+                                "data_fim": data_fim_waiver.strftime('%Y-%m-%d'),
+                                "observacao": observacao_waiver or "Criado via Dashboard"
+                            }
+                            
+                            if not salvar_alteracao_pendente("INSERT", "waiver", dados_waiver, usuario_atual):
+                                sucesso = False
+                                break
+                    
+                    if sucesso:
+                        st.success(f"✅ {len([w for w in waivers_data if w['valor_waiver'] > 0])} waiver(s) criado(s) e enviado(s) para aprovação!")
+                        st.info("⏳ Aguardando aprovação de um aprovador")
+                        st.rerun()
+                    else:
+                        st.error("❌ Erro ao salvar um ou mais waivers")
     
     st.markdown("---")
     
