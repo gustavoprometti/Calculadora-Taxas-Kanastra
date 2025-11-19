@@ -8,7 +8,7 @@ Sistema de gestão e cálculo de taxas financeiras (administração, gestão, cu
 
 - **`dashboard_gestao_taxas.py`**: Interface administrativa com **3 abas** para gestão completa:
   - **Criação/Alteração de Taxas - Regulamento**: CRUD de taxas (mínimas e variáveis) com sistema de aprovação em dois níveis (editores/aprovadores)
-  - **Waivers**: Gestão de waivers (em desenvolvimento)
+  - **Waivers**: Criação de waivers com aprovação + histórico de waivers aprovados
   - **Descontos**: Gestão de descontos (em desenvolvimento)
 - **`dashboard_sql_streamlit.py`**: Dashboard de visualização executando a query complexa de cálculo de taxas com filtros dinâmicos e provisão de waivers
 - **`Calculadora 5.0.sql`**: Query SQL principal (~600 linhas) que calcula taxas diárias, acumuladas mensais, correções por índices (IGPM/IPCA/IPC-FIPE) e compara com provisões Sinqia
@@ -85,13 +85,32 @@ USUARIOS = {
 - Taxa Variável + Criar: N linhas (usuário define quantas faixas)
 - Taxa Variável + Editar: Carrega todas as faixas de um cliente+serviço para edição em lote
 
-## Waiver Management (`dashboard_sql_streamlit.py`)
+## Waiver Management (`dashboard_gestao_taxas.py`)
+
+### Workflow de Criação de Waivers
+1. **Editor/Aprovador** acessa aba "💰 Waivers"
+2. Seleciona um ou mais fundos
+3. Configura valor e tipo (Provisionado/Não Provisionado) para cada fundo
+4. Define período de aplicação (data início e fim)
+5. Adiciona observação opcional
+6. Sistema salva como alteração pendente na tabela `alteracoes_pendentes` com `tabela='waiver'`
+7. **Aprovador** revisa no painel de aprovação
+8. Ao aprovar, sistema insere registro em `finance.historico_waivers`
 
 ### Tipos de Waiver
-- **Provisionado**: Distribui valor proporcionalmente por todos os registros do fundo no período
-- **Não Provisionado**: Aplica valor total no último registro do fundo
+- **Provisionado**: Distribui valor proporcionalmente por todos os registros do fundo no período (usado no `dashboard_sql_streamlit.py`)
+- **Não Provisionado**: Aplica valor total no último registro do fundo (usado no `dashboard_sql_streamlit.py`)
 
-### Aplicação em DataFrame
+### Visualização de Histórico
+- Exibe últimos 100 waivers aprovados da tabela `historico_waivers`
+- Filtros por fundo e tipo
+- Formatação com colunas configuradas (datas, valores monetários)
+
+## Waiver Application (`dashboard_sql_streamlit.py`)
+
+## Waiver Application (`dashboard_sql_streamlit.py`)
+
+### Aplicação em DataFrame (Visualização)
 ```python
 # Sempre aplicar APÓS filtros e ANTES de exibir dados
 if waiver_info:

@@ -898,30 +898,220 @@ elif aba_selecionada == "💰 Waivers":
     st.header("💰 Gestão de Waivers")
     st.markdown("---")
     
-    st.info("🚧 **Painel de Waivers em Desenvolvimento**")
+    # Carregar lista de fundos do BigQuery
+    @st.cache_data(ttl=3600)
+    def carregar_fundos_disponiveis():
+        """Carrega lista de fundos disponíveis"""
+        try:
+            client = get_bigquery_client()
+            query = """
+            SELECT DISTINCT name as fund_name
+            FROM `kanastra-live.hub.funds` 
+            WHERE name IS NOT NULL 
+            ORDER BY name
+            """
+            df = client.query(query).to_dataframe()
+            return df['fund_name'].tolist()
+        except Exception as e:
+            st.error(f"❌ Erro ao carregar fundos: {e}")
+            return []
     
-    st.markdown("""
-    ### 📋 Funcionalidades Planejadas:
+    # Seção: Criar Novo Waiver
+    st.subheader("➕ Criar Novo Waiver")
     
-    - 📝 **Criar novo waiver** para um ou mais fundos
-    - 📊 **Visualizar histórico** de waivers aplicados
-    - ✏️ **Editar waivers** existentes
-    - 🗑️ **Remover waivers** quando necessário
-    - 📈 **Relatórios** de waivers por período
+    with st.form("form_criar_waiver"):
+        st.markdown("### 📝 Preencha os dados do waiver")
+        st.info("ℹ️ O waiver será submetido para aprovação antes de ser aplicado.")
+        
+        # Carregar fundos
+        fundos_disponiveis = carregar_fundos_disponiveis()
+        
+        # Seleção de fundos
+        fundos_selecionados = st.multiselect(
+            "Selecione os fundos para aplicar o waiver:",
+            fundos_disponiveis,
+            help="Escolha um ou mais fundos"
+        )
+        
+        if fundos_selecionados:
+            st.markdown("---")
+            st.markdown("### 💰 Configure os valores para cada fundo")
+            
+            waivers_data = []
+            
+            for fundo in fundos_selecionados:
+                st.markdown(f"**{fundo}:**")
+                col1, col2, col3 = st.columns([2, 2, 1])
+                
+                with col1:
+                    valor_waiver = st.number_input(
+                        f"Valor (R$)",
+                        min_value=0.0,
+                        value=0.0,
+                        step=100.0,
+                        format="%.2f",
+                        key=f"valor_waiver_{fundo}"
+                    )
+                
+                with col2:
+                    tipo_waiver = st.selectbox(
+                        f"Tipo",
+                        ["Provisionado", "Não Provisionado"],
+                        key=f"tipo_waiver_{fundo}",
+                        help="Provisionado: distribui proporcionalmente | Não Provisionado: aplica no último registro"
+                    )
+                
+                with col3:
+                    st.metric("Total", f"R$ {valor_waiver:,.2f}")
+                
+                waivers_data.append({
+                    "fund_name": fundo,
+                    "valor_waiver": valor_waiver,
+                    "tipo_waiver": tipo_waiver
+                })
+                
+                st.divider()
+        
+        # Datas do período
+        st.markdown("### 📅 Período de Aplicação")
+        col_data1, col_data2 = st.columns(2)
+        
+        with col_data1:
+            data_inicio_waiver = st.date_input(
+                "Data Início:",
+                value=datetime.now().date(),
+                key="data_inicio_waiver"
+            )
+        
+        with col_data2:
+            data_fim_waiver = st.date_input(
+                "Data Fim:",
+                value=datetime.now().date(),
+                key="data_fim_waiver"
+            )
+        
+        # Observação
+        observacao_waiver = st.text_area(
+            "Observação (opcional):",
+            placeholder="Digite informações adicionais sobre este waiver...",
+            key="obs_waiver"
+        )
+        
+        submitted_waiver = st.form_submit_button("➕ Criar Waiver", use_container_width=True, type="primary")
+        
+        if submitted_waiver:
+            if not fundos_selecionados:
+                st.error("❌ Selecione pelo menos um fundo!")
+            elif any(w['valor_waiver'] <= 0 for w in waivers_data):
+                st.error("❌ Todos os valores devem ser maiores que zero!")
+            else:
+                # Salvar cada waiver como alteração pendente
+                usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                sucesso = True
+                
+                for waiver in waivers_data:
+                    if waiver['valor_waiver'] > 0:
+                        dados_waiver = {
+                            "fund_name": waiver['fund_name'],
+                            "valor_waiver": waiver['valor_waiver'],
+                            "tipo_waiver": waiver['tipo_waiver'],
+                            "data_inicio": data_inicio_waiver.strftime('%Y-%m-%d'),
+                            "data_fim": data_fim_waiver.strftime('%Y-%m-%d'),
+                            "observacao": observacao_waiver or "Criado via Dashboard"
+                        }
+                        
+                        if not salvar_alteracao_pendente("INSERT", "waiver", dados_waiver, usuario_atual):
+                            sucesso = False
+                            break
+                
+                if sucesso:
+                    st.success(f"✅ {len([w for w in waivers_data if w['valor_waiver'] > 0])} waiver(s) criado(s) e enviado(s) para aprovação!")
+                    st.info("⏳ Aguardando aprovação de um aprovador")
+                    st.rerun()
+                else:
+                    st.error("❌ Erro ao salvar um ou mais waivers")
     
-    ### 💡 Tipos de Waiver:
+    st.markdown("---")
     
-    - **Provisionado**: Distribui o valor proporcionalmente por todos os registros do fundo
-    - **Não Provisionado**: Aplica o valor total no último registro do fundo
+    # Seção: Histórico de Waivers
+    st.subheader("📊 Histórico de Waivers Aprovados")
     
-    ---
+    @st.cache_data(ttl=300)
+    def carregar_historico_waivers():
+        """Carrega histórico de waivers do BigQuery"""
+        try:
+            client = get_bigquery_client()
+            query = """
+            SELECT 
+                id,
+                data_aplicacao,
+                usuario,
+                fund_name,
+                valor_waiver,
+                tipo_waiver,
+                data_inicio,
+                data_fim,
+                observacao
+            FROM `kanastra-live.finance.historico_waivers`
+            ORDER BY data_aplicacao DESC
+            LIMIT 100
+            """
+            df = client.query(query).to_dataframe()
+            return df
+        except Exception as e:
+            st.warning(f"⚠️ Tabela de waivers ainda não existe ou erro: {e}")
+            return pd.DataFrame()
     
-    *Este painel será implementado em breve.*
-    """)
+    df_waivers = carregar_historico_waivers()
     
-    # Espaço para futuras funcionalidades
-    with st.expander("🔍 Ver Histórico de Waivers (Em Desenvolvimento)"):
-        st.write("Aqui será exibida uma tabela com o histórico completo de waivers aplicados.")
+    if not df_waivers.empty:
+        # Filtros
+        col_filtro1, col_filtro2 = st.columns(2)
+        
+        with col_filtro1:
+            fundos_filtro = st.multiselect(
+                "Filtrar por Fundo:",
+                options=sorted(df_waivers['fund_name'].unique()),
+                key="filtro_fundos_waiver"
+            )
+        
+        with col_filtro2:
+            tipo_filtro = st.selectbox(
+                "Filtrar por Tipo:",
+                ["Todos", "Provisionado", "Não Provisionado"],
+                key="filtro_tipo_waiver"
+            )
+        
+        # Aplicar filtros
+        df_filtrado = df_waivers.copy()
+        
+        if fundos_filtro:
+            df_filtrado = df_filtrado[df_filtrado['fund_name'].isin(fundos_filtro)]
+        
+        if tipo_filtro != "Todos":
+            df_filtrado = df_filtrado[df_filtrado['tipo_waiver'] == tipo_filtro]
+        
+        st.info(f"📊 Exibindo **{len(df_filtrado)}** de **{len(df_waivers)}** waivers")
+        
+        # Exibir tabela
+        st.dataframe(
+            df_filtrado,
+            use_container_width=True,
+            height=400,
+            column_config={
+                "id": None,  # Ocultar ID
+                "data_aplicacao": st.column_config.DatetimeColumn("Data Aplicação", format="DD/MM/YYYY HH:mm"),
+                "usuario": "Usuário",
+                "fund_name": "Fundo",
+                "valor_waiver": st.column_config.NumberColumn("Valor", format="R$ %.2f"),
+                "tipo_waiver": "Tipo",
+                "data_inicio": st.column_config.DateColumn("Início", format="DD/MM/YYYY"),
+                "data_fim": st.column_config.DateColumn("Fim", format="DD/MM/YYYY"),
+                "observacao": "Observação"
+            }
+        )
+    else:
+        st.info("📝 Nenhum waiver aprovado ainda.")
 
 # =======================
 # ABA 3: DESCONTOS
@@ -1028,14 +1218,36 @@ if alteracoes_filtradas:
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 if st.button(f"✅ Aprovar #{idx + 1}", key=f"aprovar_{idx}", use_container_width=True, type="primary"):
-                # Executar INSERT ou UPDATE no BigQuery
+                    # Executar INSERT ou UPDATE no BigQuery
                     try:
                         client = get_bigquery_client()
                         tabela = alteracao['tabela']
                         dados = alteracao['dados']
                         
-                        if alteracao['tipo_alteracao'] == "INSERT":
-                            # Gerar SQL INSERT
+                        # WAIVER - Lógica especial
+                        if tabela == "waiver":
+                            waiver_id = str(uuid.uuid4())
+                            data_aplicacao = datetime.now().isoformat()
+                            usuario_criador = alteracao.get('usuario', 'usuario_kanastra')
+                            
+                            sql = f"""
+                            INSERT INTO `kanastra-live.finance.historico_waivers` 
+                            (id, data_aplicacao, usuario, fund_name, valor_waiver, tipo_waiver, data_inicio, data_fim, observacao)
+                            VALUES (
+                                '{waiver_id}',
+                                TIMESTAMP('{data_aplicacao}'),
+                                '{usuario_criador}',
+                                '{dados['fund_name']}',
+                                {dados['valor_waiver']},
+                                '{dados['tipo_waiver']}',
+                                DATE('{dados['data_inicio']}'),
+                                DATE('{dados['data_fim']}'),
+                                '{dados.get('observacao', 'Aprovado via Dashboard')}'
+                            )
+                            """
+                        
+                        elif alteracao['tipo_alteracao'] == "INSERT":
+                            # Gerar SQL INSERT para taxas
                             colunas = [k for k in dados.keys()]
                             valores = []
                             for k in colunas:
@@ -1058,7 +1270,7 @@ if alteracoes_filtradas:
                             VALUES ({', '.join(valores)})
                             """
                             
-                        else:  # UPDATE
+                        else:  # UPDATE para taxas
                             # Gerar SQL UPDATE
                             set_clause = []
                             for k, v in dados.items():
@@ -1090,10 +1302,17 @@ if alteracoes_filtradas:
                         query_job = client.query(sql)
                         query_job.result()
                         
+                        # Limpar cache se for waiver
+                        if tabela == "waiver":
+                            st.cache_data.clear()
+                        
                         # Atualizar status no BigQuery com aprovador
                         aprovador = st.session_state.usuario_aprovador
                         if atualizar_status_alteracao(alteracao['id'], 'APROVADO', aprovador):
-                            st.success(f"✅ Alteração #{idx + 1} aprovada por {aprovador} e aplicada no BigQuery!")
+                            if tabela == "waiver":
+                                st.success(f"✅ Waiver #{idx + 1} aprovado por {aprovador} e registrado no histórico!")
+                            else:
+                                st.success(f"✅ Alteração #{idx + 1} aprovada por {aprovador} e aplicada no BigQuery!")
                             st.rerun()
                         else:
                             st.error("❌ Erro ao atualizar status da alteração")
