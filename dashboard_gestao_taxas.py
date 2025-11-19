@@ -1585,29 +1585,37 @@ if solicitacoes_filtradas:
                             tipo_alt = alteracao['tipo_alteracao']
                             
                             try:
-                                # WAIVER - Lógica especial
+                                # WAIVER - Insere em finance.descontos com categoria='waiver'
                                 if tabela_alt == "waiver":
                                     waiver_id = str(uuid.uuid4())
                                     data_aplicacao = datetime.now().isoformat()
                                     usuario_criador = alteracao.get('usuario', 'usuario_kanastra')
                                     
                                     sql = f"""
-                                    INSERT INTO `kanastra-live.finance.historico_waivers` 
-                                    (id, data_aplicacao, usuario, fund_name, valor_waiver, tipo_waiver, data_inicio, data_fim, observacao)
+                                    INSERT INTO `kanastra-live.finance.descontos` 
+                                    (id, data_aplicacao, usuario, fund_id, fund_name, categoria,
+                                     valor_desconto, tipo_desconto, percentual_desconto, origem,
+                                     data_inicio, data_fim, servico, observacao, documento_referencia)
                                     VALUES (
                                         '{waiver_id}',
                                         TIMESTAMP('{data_aplicacao}'),
                                         '{usuario_criador}',
+                                        NULL,
                                         '{dados['fund_name']}',
+                                        'waiver',
                                         {dados['valor_waiver']},
                                         '{dados['tipo_waiver']}',
+                                        NULL,
+                                        NULL,
                                         DATE('{dados['data_inicio']}'),
                                         DATE('{dados['data_fim']}'),
-                                        '{dados.get('observacao', 'Aprovado via Dashboard')}'
+                                        NULL,
+                                        '{dados.get('observacao', 'Aprovado via Dashboard')}',
+                                        NULL
                                     )
                                     """
                                 
-                                # DESCONTO - Inserir na tabela descontos
+                                # DESCONTO - Inserir na tabela descontos com categoria baseada na origem
                                 elif tabela_alt == "desconto":
                                     desconto_id = str(uuid.uuid4())
                                     data_aplicacao = datetime.now().isoformat()
@@ -1615,17 +1623,20 @@ if solicitacoes_filtradas:
                                     
                                     # Obter origem da alteração (juridico ou comercial)
                                     origem_desconto = alteracao.get('origem', 'comercial')
+                                    categoria_desconto = f'desconto_{origem_desconto}'  # 'desconto_juridico' ou 'desconto_comercial'
                                     
                                     sql = f"""
                                     INSERT INTO `kanastra-live.finance.descontos` 
-                                    (id, data_aplicacao, usuario, fund_id, fund_name, valor_desconto, tipo_desconto, 
-                                     percentual_desconto, origem, data_inicio, data_fim, servico, observacao, documento_referencia)
+                                    (id, data_aplicacao, usuario, fund_id, fund_name, categoria,
+                                     valor_desconto, tipo_desconto, percentual_desconto, origem,
+                                     data_inicio, data_fim, servico, observacao, documento_referencia)
                                     VALUES (
                                         '{desconto_id}',
                                         TIMESTAMP('{data_aplicacao}'),
                                         '{usuario_aprovador}',
                                         {dados.get('fund_id', 0)},
                                         '{dados.get('fund_name', '')}',
+                                        '{categoria_desconto}',
                                         {dados.get('valor_desconto', 0)},
                                         '{dados.get('tipo_desconto', 'Fixo')}',
                                         {dados.get('percentual_desconto') if dados.get('percentual_desconto') else 'NULL'},

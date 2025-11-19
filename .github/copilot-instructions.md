@@ -17,8 +17,8 @@ Sistema de gestão e cálculo de taxas financeiras (administração, gestão, cu
   - `kanastra-live.finance.fee_variavel`: Taxas variáveis percentuais por fundo/serviço/faixa de PL + **data_inicio/data_fim**
   - `kanastra-live.finance.alteracoes_pendentes`: Workflow de aprovação (JSON com dados, status PENDENTE/APROVADO/REJEITADO, **solicitacao_id** para agrupar linhas relacionadas, **tipo_alteracao_categoria** e **origem**)
   - `kanastra-live.finance.historico_alteracoes`: Audit trail completo de todas as alterações aprovadas com timestamps, usuários, tipo e origem
-  - `kanastra-live.finance.historico_waivers`: Registro de waivers aplicados (provisionados/não provisionados) - **usado pela calculadora**
-  - `kanastra-live.finance.descontos`: Registro de descontos aprovados (jurídico/comercial) com vigência - **usado pela calculadora**
+  - `kanastra-live.finance.descontos`: **TABELA UNIFICADA** de waivers e descontos (jurídico/comercial) - **ÚNICA FONTE para calculadora**. Campo `categoria` distingue: 'waiver', 'desconto_juridico', 'desconto_comercial'
+  - `kanastra-live.finance.historico_waivers`: **DEPRECATED** - Waivers agora vão para `finance.descontos` com categoria='waiver'
   - `kanastra-live.hub.funds`: Cadastro de fundos (id, name, government_id/cnpj)
 
 ## BigQuery Integration Patterns
@@ -100,7 +100,7 @@ USUARIOS = {
 5. Adiciona observação opcional
 6. Sistema salva como alteração pendente na tabela `alteracoes_pendentes` com `tabela='waiver'`
 7. **Aprovador** revisa no painel de aprovação
-8. Ao aprovar, sistema insere registro em `finance.historico_waivers`
+8. Ao aprovar, sistema insere registro em `finance.descontos` com `categoria='waiver'`
 
 ### Tipos de Waiver
 - **Provisionado**: Distribui valor proporcionalmente por todos os registros do fundo no período (usado no `dashboard_sql_streamlit.py`)
@@ -186,21 +186,28 @@ elif aba_selecionada == "🎯 Descontos":
    - Serviço específico ou NULL para todos
    - Documento de referência (processo, contrato)
 2. **Aprovação**: Salvo em `alteracoes_pendentes` com `tipo_alteracao_categoria='desconto'` e `origem`
-3. **Execução**: Ao aprovar, sistema insere em `finance.descontos`
-4. **Calculadora**: Query busca descontos ativos por fundo/data/serviço
+3. **Execução**: Ao aprovar, sistema insere em `finance.descontos` com `categoria='desconto_juridico'` ou `'desconto_comercial'`
+4. **Calculadora**: Query busca ajustes ativos (waivers + descontos) por fundo/data/serviço usando campo `categoria`
 5. **Histórico**: Registro permanente em `historico_alteracoes`
 
 ### Tipos de Desconto
 - **Fixo**: Valor em R$ deduzido da taxa final (ex: R$ 5.000 de desconto)
 - **Percentual**: % de desconto sobre a taxa calculada (ex: 10% de desconto)
 
-### Query para Calculadora
+### Query para Calculadora (Tabela Unificada)
 ```sql
+-- Buscar todos os ajustes (waivers + descontos jurídicos + descontos comerciais)
 SELECT * FROM `kanastra-live.finance.descontos`
-WHERE fund_id = ?
+WHERE (fund_id = ? OR fund_name = ?)  -- fund_id para descontos, fund_name para waivers
 AND reference_dt >= data_inicio
 AND (data_fim IS NULL OR reference_dt <= data_fim)
 AND (servico IS NULL OR servico = ?)
+ORDER BY categoria, data_aplicacao;
+
+-- Filtrar por tipo específico:
+-- categoria = 'waiver' → Waivers (Provisionado/Nao_Provisionado)
+-- categoria = 'desconto_juridico' → Descontos por ordem judicial
+-- categoria = 'desconto_comercial' → Descontos por acordo comercial
 ```
 
 ## Desenvolvimento Local
