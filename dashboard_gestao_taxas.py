@@ -621,88 +621,9 @@ def atualizar_status_alteracao(alteracao_id, novo_status, aprovador=None):
         st.error(f"❌ Erro ao atualizar status: {e}")
         return False
 
-def salvar_historico_alteracao(alteracao, aprovador, tipo_alteracao, origem=None):
-    """
-    Salva registro no histórico de alterações aprovadas
-    
-    Args:
-        alteracao: Dict com dados da alteração (id, usuario, timestamp, tipo_alteracao, tabela, dados)
-        aprovador: Nome do usuário que aprovou
-        tipo_alteracao: Categoria (taxa_minima, taxa_variavel, waiver, desconto)
-        origem: Origem do desconto (juridico/comercial) - obrigatório apenas para descontos
-    """
-    client = get_bigquery_client()
-    if client is None:
-        return False
-    
-    try:
-        # Preparar dados
-        alteracao_id = alteracao['id']
-        usuario_solicitante = alteracao.get('usuario', 'desconhecido')
-        timestamp_solicitacao = alteracao['timestamp'].isoformat()
-        timestamp_aprovacao = datetime.now().isoformat()
-        tipo_operacao = alteracao['tipo_alteracao']  # INSERT, UPDATE
-        tabela = alteracao['tabela']
-        dados_depois = json.dumps(alteracao['dados'], ensure_ascii=False)
-        solicitacao_id = alteracao.get('solicitacao_id', alteracao_id)
-        
-        # Determinar tipo_alteracao baseado na tabela se não especificado
-        if not tipo_alteracao:
-            if tabela == 'fee_minimo':
-                tipo_alteracao = 'taxa_minima'
-            elif tabela == 'fee_variavel':
-                tipo_alteracao = 'taxa_variavel'
-            elif tabela == 'waiver':
-                tipo_alteracao = 'waiver'
-            else:
-                tipo_alteracao = 'desconto'
-        
-        # Montar query INSERT
-        if origem:  # Para descontos
-            query = f"""
-            INSERT INTO `kanastra-live.finance.historico_alteracoes`
-            (id, usuario_solicitante, usuario_aprovador, timestamp_solicitacao, timestamp_aprovacao,
-             tipo_operacao, tipo_alteracao, origem, tabela, dados_antes, dados_depois, solicitacao_id)
-            VALUES (
-                '{alteracao_id}',
-                '{usuario_solicitante}',
-                '{aprovador}',
-                TIMESTAMP('{timestamp_solicitacao}'),
-                TIMESTAMP('{timestamp_aprovacao}'),
-                '{tipo_operacao}',
-                '{tipo_alteracao}',
-                '{origem}',
-                '{tabela}',
-                NULL,
-                JSON '{dados_depois}',
-                '{solicitacao_id}'
-            )
-            """
-        else:  # Para taxas e waivers
-            query = f"""
-            INSERT INTO `kanastra-live.finance.historico_alteracoes`
-            (id, usuario_solicitante, usuario_aprovador, timestamp_solicitacao, timestamp_aprovacao,
-             tipo_operacao, tipo_alteracao, tabela, dados_antes, dados_depois, solicitacao_id)
-            VALUES (
-                '{alteracao_id}',
-                '{usuario_solicitante}',
-                '{aprovador}',
-                TIMESTAMP('{timestamp_solicitacao}'),
-                TIMESTAMP('{timestamp_aprovacao}'),
-                '{tipo_operacao}',
-                '{tipo_alteracao}',
-                '{tabela}',
-                NULL,
-                JSON '{dados_depois}',
-                '{solicitacao_id}'
-            )
-            """
-        
-        client.query(query).result()
-        return True
-    except Exception as e:
-        st.error(f"❌ Erro ao salvar no histórico: {e}")
-        return False
+# FUNÇÃO REMOVIDA: salvar_historico_alteracao
+# A tabela finance.historico_alteracoes não existe mais
+# Usamos finance.descontos como fonte única de histórico
 
 # =======================
 # VERIFICAÇÃO DE LOGIN - BLOQUEIO TOTAL
@@ -2249,39 +2170,21 @@ if solicitacoes_filtradas:
                             if tabela == "waiver":
                                 st.cache_data.clear()
                             
-                            # Determinar tipo_alteracao para o histórico
-                            if tabela == "waiver":
-                                tipo_hist = "waiver"
-                            elif tabela == "fee_minimo":
-                                tipo_hist = "taxa_minima"
-                            elif tabela == "fee_variavel":
-                                tipo_hist = "taxa_variavel"
-                            else:
-                                tipo_hist = "desconto"
-                            
-                            # Salvar no histórico e atualizar status de TODAS as linhas da solicitação
+                            # Atualizar status de TODAS as linhas da solicitação como APROVADO
                             aprovador = st.session_state.usuario_logado
                             sucesso_atualizacao = True
-                            sucesso_historico = True
                             
                             for alteracao in solicitacao:
-                                # Salvar no histórico
-                                if not salvar_historico_alteracao(alteracao, aprovador, tipo_hist):
-                                    sucesso_historico = False
-                                
                                 # Atualizar status
                                 if not atualizar_status_alteracao(alteracao['id'], 'APROVADO', aprovador):
                                     sucesso_atualizacao = False
                             
-                            if sucesso_atualizacao and sucesso_historico:
+                            if sucesso_atualizacao:
                                 if tabela == "waiver":
                                     st.success(f"✅ Solicitação completa aprovada! {len(solicitacao)} waiver(s) registrado(s)!")
                                 else:
                                     st.success(f"✅ Solicitação completa aprovada! {len(solicitacao)} linha(s) aplicada(s)!")
-                                st.info("📝 Registros salvos no histórico de alterações")
                                 st.rerun()
-                            elif sucesso_atualizacao and not sucesso_historico:
-                                st.warning("⚠️ Alterações aplicadas mas houve erro ao salvar no histórico")
                             else:
                                 st.warning("⚠️ Alterações aplicadas mas houve erro ao atualizar status")
                         else:
