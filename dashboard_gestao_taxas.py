@@ -1607,6 +1607,37 @@ if solicitacoes_filtradas:
                                     )
                                     """
                                 
+                                # DESCONTO - Inserir na tabela descontos
+                                elif tabela_alt == "desconto":
+                                    desconto_id = str(uuid.uuid4())
+                                    data_aplicacao = datetime.now().isoformat()
+                                    usuario_aprovador = st.session_state.usuario_logado
+                                    
+                                    # Obter origem da alteração (juridico ou comercial)
+                                    origem_desconto = alteracao.get('origem', 'comercial')
+                                    
+                                    sql = f"""
+                                    INSERT INTO `kanastra-live.finance.descontos` 
+                                    (id, data_aplicacao, usuario, fund_id, fund_name, valor_desconto, tipo_desconto, 
+                                     percentual_desconto, origem, data_inicio, data_fim, servico, observacao, documento_referencia)
+                                    VALUES (
+                                        '{desconto_id}',
+                                        TIMESTAMP('{data_aplicacao}'),
+                                        '{usuario_aprovador}',
+                                        {dados.get('fund_id', 0)},
+                                        '{dados.get('fund_name', '')}',
+                                        {dados.get('valor_desconto', 0)},
+                                        '{dados.get('tipo_desconto', 'Fixo')}',
+                                        {dados.get('percentual_desconto') if dados.get('percentual_desconto') else 'NULL'},
+                                        '{origem_desconto}',
+                                        DATE('{dados['data_inicio']}'),
+                                        {"DATE('" + dados['data_fim'] + "')" if dados.get('data_fim') else 'NULL'},
+                                        {f"'{dados['servico']}'" if dados.get('servico') else 'NULL'},
+                                        '{dados.get('observacao', 'Aprovado via Dashboard')}',
+                                        '{dados.get('documento_referencia', '')}'
+                                    )
+                                    """
+                                
                                 elif tipo_alt == "INSERT":
                                     # Gerar SQL INSERT para taxas
                                     colunas = [k for k in dados.keys()]

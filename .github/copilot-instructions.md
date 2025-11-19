@@ -15,8 +15,10 @@ Sistema de gestão e cálculo de taxas financeiras (administração, gestão, cu
 - **Tabelas BigQuery**:
   - `kanastra-live.finance.fee_minimo`: Taxas mínimas por fundo/serviço/faixa + **data_inicio/data_fim**
   - `kanastra-live.finance.fee_variavel`: Taxas variáveis percentuais por fundo/serviço/faixa de PL + **data_inicio/data_fim**
-  - `kanastra-live.finance.alteracoes_pendentes`: Workflow de aprovação (JSON com dados, status PENDENTE/APROVADO/REJEITADO, **solicitacao_id** para agrupar linhas relacionadas)
-  - `kanastra-live.finance.historico_waivers`: Registro de waivers aplicados (provisionados/não provisionados)
+  - `kanastra-live.finance.alteracoes_pendentes`: Workflow de aprovação (JSON com dados, status PENDENTE/APROVADO/REJEITADO, **solicitacao_id** para agrupar linhas relacionadas, **tipo_alteracao_categoria** e **origem**)
+  - `kanastra-live.finance.historico_alteracoes`: Audit trail completo de todas as alterações aprovadas com timestamps, usuários, tipo e origem
+  - `kanastra-live.finance.historico_waivers`: Registro de waivers aplicados (provisionados/não provisionados) - **usado pela calculadora**
+  - `kanastra-live.finance.descontos`: Registro de descontos aprovados (jurídico/comercial) com vigência - **usado pela calculadora**
   - `kanastra-live.hub.funds`: Cadastro de fundos (id, name, government_id/cnpj)
 
 ## BigQuery Integration Patterns
@@ -173,6 +175,33 @@ elif aba_selecionada == "🎯 Descontos":
 - **Cores**: Verde principal `#2daa82`, verde escuro `#193c32`, verde médio `#14735a`
 - **Fonte**: Inter (Google Fonts)
 - **Logo**: `https://www.kanastra.design/symbol-green.svg`
+
+## Desconto Management
+
+### Fluxo Completo de Descontos
+1. **Criação**: Editor/Aprovador cria desconto na aba "🎯 Descontos" especificando:
+   - Fundo, valor/percentual, tipo (Fixo/Percentual)
+   - **Origem obrigatória**: "juridico" (ordem judicial) ou "comercial" (acordo)
+   - Período de vigência (data_inicio/data_fim)
+   - Serviço específico ou NULL para todos
+   - Documento de referência (processo, contrato)
+2. **Aprovação**: Salvo em `alteracoes_pendentes` com `tipo_alteracao_categoria='desconto'` e `origem`
+3. **Execução**: Ao aprovar, sistema insere em `finance.descontos`
+4. **Calculadora**: Query busca descontos ativos por fundo/data/serviço
+5. **Histórico**: Registro permanente em `historico_alteracoes`
+
+### Tipos de Desconto
+- **Fixo**: Valor em R$ deduzido da taxa final (ex: R$ 5.000 de desconto)
+- **Percentual**: % de desconto sobre a taxa calculada (ex: 10% de desconto)
+
+### Query para Calculadora
+```sql
+SELECT * FROM `kanastra-live.finance.descontos`
+WHERE fund_id = ?
+AND reference_dt >= data_inicio
+AND (data_fim IS NULL OR reference_dt <= data_fim)
+AND (servico IS NULL OR servico = ?)
+```
 
 ## Desenvolvimento Local
 
