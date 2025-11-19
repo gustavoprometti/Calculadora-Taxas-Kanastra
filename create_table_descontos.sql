@@ -16,8 +16,11 @@ CREATE TABLE IF NOT EXISTS `kanastra-live.finance.descontos` (
   
   -- Valores do desconto/waiver
   valor_desconto FLOAT64 NOT NULL,  -- Valor em R$
-  tipo_desconto STRING NOT NULL,  -- 'Percentual', 'Fixo', 'Provisionado', 'Nao_Provisionado'
+  tipo_desconto STRING NOT NULL,  -- 'Fixo', 'Percentual' (para descontos com forma de cálculo)
   percentual_desconto FLOAT64,  -- Se tipo=Percentual, valor em %
+  
+  -- Forma de aplicação (para waivers e descontos)
+  forma_aplicacao STRING NOT NULL,  -- 'Provisionado' (distribui por registros) ou 'Nao_Provisionado' (aplica no último)
   
   -- Origem (apenas para descontos, NULL para waivers)
   origem STRING,  -- 'juridico' ou 'comercial' (NULL para waivers)
@@ -54,9 +57,10 @@ ON `kanastra-live.finance.descontos`(origem, data_inicio);
 -- fund_id: ID do fundo (NULL para waivers que usam fund_name)
 -- fund_name: Nome do fundo
 -- categoria: 'waiver' (desconto especial) / 'desconto_juridico' (ordem judicial) / 'desconto_comercial' (acordo)
--- valor_desconto: Valor em R$
--- tipo_desconto: Para waivers: 'Provisionado'/'Nao_Provisionado'. Para descontos: 'Percentual'/'Fixo'
+-- valor_desconto: Valor em R$ (ou base para cálculo se Percentual)
+-- tipo_desconto: Forma de cálculo - 'Fixo' (valor fixo em R$) ou 'Percentual' (% sobre taxa calculada)
 -- percentual_desconto: Se tipo=Percentual, guardar % (ex: 10.0 = 10%)
+-- forma_aplicacao: Como distribuir - 'Provisionado' (divide por todos registros) ou 'Nao_Provisionado' (aplica apenas no último)
 -- origem: 'juridico' ou 'comercial' (apenas para descontos, NULL para waivers)
 -- data_inicio: Data em que começa a vigorar
 -- data_fim: Data em que termina (NULL = indefinido)

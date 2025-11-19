@@ -26,12 +26,19 @@
 │     - Campo categoria: 'waiver', 'desconto_juridico',           │
 │                        'desconto_comercial'                      │
 │     - Campos: fund_id (descontos), fund_name (waivers),         │
-│               valor_desconto, tipo_desconto, origem,             │
-│               data_inicio, data_fim                              │
-│     - Tipos waiver: Provisionado/Nao_Provisionado               │
-│     - Tipos desconto: Fixo (R$) ou Percentual (%)               │
-│     - Origem: 'juridico' (ordem judicial) ou 'comercial'        │
-│     - Deduz do total calculado                                  │
+│               valor_desconto, tipo_desconto, forma_aplicacao,    │
+│               origem, data_inicio, data_fim                      │
+│                                                                  │
+│     TIPO DE CÁLCULO (tipo_desconto):                            │
+│       - Fixo: Valor fixo em R$ (ex: R$ 5.000)                   │
+│       - Percentual: % sobre taxa calculada (ex: 10%)            │
+│                                                                  │
+│     FORMA DE APLICAÇÃO (forma_aplicacao):                       │
+│       - Provisionado: Distribui por todos registros             │
+│       - Nao_Provisionado: Aplica só no último registro          │
+│                                                                  │
+│     Origem: 'juridico' (ordem judicial) ou 'comercial'          │
+│     Deduz do total calculado durante período de vigência        │
 │                                                                  │
 │  DEPRECATED:                                                     │
 │  - finance.historico_waivers → Migrado para finance.descontos   │
@@ -131,16 +138,23 @@
 │         AND reference_dt BETWEEN data_inicio AND data_fim           │
 │         AND (servico IS NULL OR servico = ?)                        │
 │                                                                      │
-│         Categoria 'waiver':                                         │
-│           - tipo='Provisionado': distribui valor por registros      │
-│           - tipo='Nao_Provisionado': aplica no último registro      │
+│         TIPO DE CÁLCULO (tipo_desconto):                            │
+│           - 'Fixo': Deduz valor em R$                               │
+│           - 'Percentual': Aplica % sobre taxa calculada             │
 │                                                                      │
-│         Categoria 'desconto_juridico' ou 'desconto_comercial':      │
-│           - tipo='Fixo': deduz valor em R$                          │
-│           - tipo='Percentual': aplica % de desconto                 │
+│         FORMA DE APLICAÇÃO (forma_aplicacao):                       │
+│           - 'Provisionado': Distribui por todos registros           │
+│             Ex: R$ 10.000 / 10 registros = R$ 1.000 cada            │
+│           - 'Nao_Provisionado': Aplica total no último              │
+│             Ex: R$ 10.000 deduzido apenas do último registro        │
+│                                                                      │
+│         Aplica-se para TODAS as categorias:                         │
+│           - categoria='waiver'                                      │
+│           - categoria='desconto_juridico'                           │
+│           - categoria='desconto_comercial'                          │
 │                                                                      │
 │  4. Resultado final:                                                │
-│     └─ Taxa calculada - Waivers - Descontos = Taxa Final           │
+│     └─ Taxa calculada - Ajustes (waivers/descontos) = Taxa Final   │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```

@@ -17,7 +17,7 @@ Sistema de gestão e cálculo de taxas financeiras (administração, gestão, cu
   - `kanastra-live.finance.fee_variavel`: Taxas variáveis percentuais por fundo/serviço/faixa de PL + **data_inicio/data_fim**
   - `kanastra-live.finance.alteracoes_pendentes`: Workflow de aprovação (JSON com dados, status PENDENTE/APROVADO/REJEITADO, **solicitacao_id** para agrupar linhas relacionadas, **tipo_alteracao_categoria** e **origem**)
   - `kanastra-live.finance.historico_alteracoes`: Audit trail completo de todas as alterações aprovadas com timestamps, usuários, tipo e origem
-  - `kanastra-live.finance.descontos`: **TABELA UNIFICADA** de waivers e descontos (jurídico/comercial) - **ÚNICA FONTE para calculadora**. Campo `categoria` distingue: 'waiver', 'desconto_juridico', 'desconto_comercial'
+  - `kanastra-live.finance.descontos`: **TABELA UNIFICADA** de waivers e descontos (jurídico/comercial) - **ÚNICA FONTE para calculadora**. Campo `categoria` distingue: 'waiver', 'desconto_juridico', 'desconto_comercial'. Campos `tipo_desconto` (Fixo/Percentual) e `forma_aplicacao` (Provisionado/Nao_Provisionado) definem como calcular e aplicar
   - `kanastra-live.finance.historico_waivers`: **DEPRECATED** - Waivers agora vão para `finance.descontos` com categoria='waiver'
   - `kanastra-live.hub.funds`: Cadastro de fundos (id, name, government_id/cnpj)
 
@@ -102,9 +102,12 @@ USUARIOS = {
 7. **Aprovador** revisa no painel de aprovação
 8. Ao aprovar, sistema insere registro em `finance.descontos` com `categoria='waiver'`
 
-### Tipos de Waiver
-- **Provisionado**: Distribui valor proporcionalmente por todos os registros do fundo no período (usado no `dashboard_sql_streamlit.py`)
-- **Não Provisionado**: Aplica valor total no último registro do fundo (usado no `dashboard_sql_streamlit.py`)
+### Forma de Aplicação (Waivers e Descontos)
+- **Provisionado**: Distribui valor proporcionalmente por todos os registros do fundo no período
+  - Exemplo: Waiver de R$ 10.000 com 10 registros = R$ 1.000 por registro
+- **Não Provisionado**: Aplica valor total apenas no último registro do fundo no período
+  - Exemplo: Waiver de R$ 10.000 = R$ 10.000 deduzido do último registro
+- Aplica-se tanto para **waivers** quanto para **descontos**
 
 ### Visualização de Histórico
 - Exibe últimos 100 waivers aprovados da tabela `historico_waivers`
@@ -190,9 +193,13 @@ elif aba_selecionada == "🎯 Descontos":
 4. **Calculadora**: Query busca ajustes ativos (waivers + descontos) por fundo/data/serviço usando campo `categoria`
 5. **Histórico**: Registro permanente em `historico_alteracoes`
 
-### Tipos de Desconto
+### Tipos de Desconto (Forma de Cálculo)
 - **Fixo**: Valor em R$ deduzido da taxa final (ex: R$ 5.000 de desconto)
 - **Percentual**: % de desconto sobre a taxa calculada (ex: 10% de desconto)
+
+### Forma de Aplicação (igual aos Waivers)
+- **Provisionado**: Distribui desconto por todos os registros do período
+- **Não Provisionado**: Aplica desconto total no último registro do período
 
 ### Query para Calculadora (Tabela Unificada)
 ```sql

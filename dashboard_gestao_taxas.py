@@ -1591,10 +1591,13 @@ if solicitacoes_filtradas:
                                     data_aplicacao = datetime.now().isoformat()
                                     usuario_criador = alteracao.get('usuario', 'usuario_kanastra')
                                     
+                                    # tipo_waiver vem como 'Provisionado' ou 'Nao_Provisionado'
+                                    forma_aplicacao = dados['tipo_waiver']
+                                    
                                     sql = f"""
                                     INSERT INTO `kanastra-live.finance.descontos` 
                                     (id, data_aplicacao, usuario, fund_id, fund_name, categoria,
-                                     valor_desconto, tipo_desconto, percentual_desconto, origem,
+                                     valor_desconto, tipo_desconto, percentual_desconto, forma_aplicacao, origem,
                                      data_inicio, data_fim, servico, observacao, documento_referencia)
                                     VALUES (
                                         '{waiver_id}',
@@ -1604,8 +1607,9 @@ if solicitacoes_filtradas:
                                         '{dados['fund_name']}',
                                         'waiver',
                                         {dados['valor_waiver']},
-                                        '{dados['tipo_waiver']}',
+                                        'Fixo',
                                         NULL,
+                                        '{forma_aplicacao}',
                                         NULL,
                                         DATE('{dados['data_inicio']}'),
                                         DATE('{dados['data_fim']}'),
@@ -1625,10 +1629,13 @@ if solicitacoes_filtradas:
                                     origem_desconto = alteracao.get('origem', 'comercial')
                                     categoria_desconto = f'desconto_{origem_desconto}'  # 'desconto_juridico' ou 'desconto_comercial'
                                     
+                                    # Forma de aplicação: Provisionado ou Nao_Provisionado
+                                    forma_aplicacao = dados.get('forma_aplicacao', 'Nao_Provisionado')
+                                    
                                     sql = f"""
                                     INSERT INTO `kanastra-live.finance.descontos` 
                                     (id, data_aplicacao, usuario, fund_id, fund_name, categoria,
-                                     valor_desconto, tipo_desconto, percentual_desconto, origem,
+                                     valor_desconto, tipo_desconto, percentual_desconto, forma_aplicacao, origem,
                                      data_inicio, data_fim, servico, observacao, documento_referencia)
                                     VALUES (
                                         '{desconto_id}',
@@ -1640,6 +1647,7 @@ if solicitacoes_filtradas:
                                         {dados.get('valor_desconto', 0)},
                                         '{dados.get('tipo_desconto', 'Fixo')}',
                                         {dados.get('percentual_desconto') if dados.get('percentual_desconto') else 'NULL'},
+                                        '{forma_aplicacao}',
                                         '{origem_desconto}',
                                         DATE('{dados['data_inicio']}'),
                                         {"DATE('" + dados['data_fim'] + "')" if dados.get('data_fim') else 'NULL'},
