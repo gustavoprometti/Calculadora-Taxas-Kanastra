@@ -783,58 +783,93 @@ with col_user2:
 st.markdown("---")
 
 # =======================
+# SIDEBAR - INFORMAÇÕES E STATUS
+# =======================
+
+with st.sidebar:
+    st.image("https://www.kanastra.design/wordmark-green.svg", width=150)
+    st.markdown("---")
+    
+    # Informações do usuário logado
+    if st.session_state.usuario_logado:
+        perfil_emoji = "👑" if perfil == "aprovador" else "✏️"
+        perfil_nome = "Aprovador" if perfil == "aprovador" else "Editor"
+        
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            padding: 1rem;
+            border-radius: 12px;
+            border-left: 4px solid #2196f3;
+            margin-bottom: 1rem;
+        ">
+            <div style="color: #1565c0; font-weight: 600; margin-bottom: 0.5rem;">
+                {perfil_emoji} {perfil_nome}
+            </div>
+            <div style="color: #0d47a1; font-size: 0.9rem;">
+                {st.session_state.usuario_logado}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Quick stats
+    st.markdown("### 📊 Status Rápido")
+    
+    # Verificar alterações pendentes
+    solicitacoes_pendentes_sidebar = carregar_alteracoes_pendentes()
+    if perfil == "editor":
+        minhas_solicitacoes = [s for s in solicitacoes_pendentes_sidebar if s[0].get('usuario') == st.session_state.usuario_logado]
+        total_minhas = len(minhas_solicitacoes)
+        if total_minhas > 0:
+            st.warning(f"⏳ {total_minhas} suas solicitações pendentes")
+        else:
+            st.success("✅ Nenhuma solicitação sua pendente")
+    else:
+        total_todas = len(solicitacoes_pendentes_sidebar)
+        if total_todas > 0:
+            st.warning(f"⏳ {total_todas} solicitações para revisar")
+        else:
+            st.success("✅ Nenhuma solicitação pendente")
+    
+    st.markdown("---")
+    
+    # Informações úteis
+    st.markdown("### ℹ️ Informações")
+    st.markdown("""
+    **📋 Taxas**
+    - Taxa Mínima: Valor fixo por faixa
+    - Taxa Variável: % sobre PL
+    
+    **💰 Waivers**
+    - Fixo: Valor em R$
+    - Percentual: % de desconto
+    
+    **🎯 Descontos**
+    - Jurídico: Ordem judicial
+    - Comercial: Acordo comercial
+    """)
+
+# =======================
 # NAVEGAÇÃO POR ABAS
 # =======================
 
-# Navegação moderna na sidebar
-with st.sidebar:
-    st.markdown("### 📑 Painéis")
-    
-    # Cards de navegação estilo moderno
-    opcoes = [
-        ("📋 Criação/Alteração de Taxas - Regulamento", "taxas"),
-        ("💰 Waivers", "waivers"),
-        ("🎯 Descontos", "descontos")
-    ]
-    
-    # Inicializar seleção se não existir
-    if 'aba_selecionada' not in st.session_state:
-        st.session_state.aba_selecionada = "📋 Criação/Alteração de Taxas - Regulamento"
-    
-    for label, key in opcoes:
-        is_selected = st.session_state.aba_selecionada == label
-        
-        if is_selected:
-            st.markdown(f"""
-            <div style="
-                padding: 1rem 1.25rem;
-                margin: 0.75rem 0;
-                border-radius: 12px;
-                background: linear-gradient(135deg, #14735a 0%, #2daa82 100%);
-                color: white;
-                text-align: center;
-                font-size: 1rem;
-                font-weight: 700;
-                box-shadow: 0 4px 12px rgba(20, 115, 90, 0.3);
-            ">
-                {label}
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            if st.button(label, key=f"nav_{key}", use_container_width=True):
-                st.session_state.aba_selecionada = label
-                st.rerun()
-    
-    st.markdown("---")
+# Navegação com Tabs no topo (estilo moderno)
+st.markdown("---")
 
-# Obter aba selecionada do session_state
-aba_selecionada = st.session_state.aba_selecionada
+# Criar tabs para navegação
+tab1, tab2, tab3 = st.tabs([
+    "📋 Criação/Alteração de Taxas - Regulamento",
+    "💰 Waivers",
+    "🎯 Descontos"
+])
 
 # =======================
-# ABA 1: CRIAÇÃO/ALTERAÇÃO DE TAXAS - REGULAMENTO
+# TAB 1: CRIAÇÃO/ALTERAÇÃO DE TAXAS - REGULAMENTO
 # =======================
 
-if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
+with tab1:
     
     st.header("📋 Criação/Alteração de Taxas - Regulamento")
     st.markdown("---")
@@ -1330,8 +1365,10 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
 # =======================
 # ABA 2: WAIVERS
 # =======================
+# TAB 2: WAIVERS
+# =======================
 
-elif aba_selecionada == "💰 Waivers":
+with tab2:
     
     st.header("💰 Gestão de Waivers")
     st.markdown("---")
@@ -1689,8 +1726,10 @@ elif aba_selecionada == "💰 Waivers":
 # =======================
 # ABA 3: DESCONTOS
 # =======================
+# TAB 3: DESCONTOS
+# =======================
 
-elif aba_selecionada == "🎯 Descontos":
+with tab3:
     
     st.header("🎯 Gestão de Descontos")
     st.markdown("---")
