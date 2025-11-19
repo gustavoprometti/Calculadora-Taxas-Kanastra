@@ -371,8 +371,8 @@ if 'df' in st.session_state:
         ]
     
     # APLICAR WAIVERS E DESCONTOS APROVADOS do BigQuery
-    @st.cache_data(ttl=300)
-    def carregar_ajustes_ativos(data_inicio_dt, data_fim_dt):
+    @st.cache_data(ttl=60)  # Cache por 1 minuto (ajustes precisam aparecer rapidamente)
+    def carregar_ajustes_ativos(data_inicio_dt, data_fim_dt, force_reload=False):
         """Carrega waivers e descontos aprovados que se aplicam ao período"""
         try:
             client = get_bigquery_client()
@@ -388,19 +388,39 @@ if 'df' in st.session_state:
                 servico,
                 data_inicio,
                 data_fim,
-                observacao
+                observacao,
+                data_aplicacao
             FROM `kanastra-live.finance.descontos`
             WHERE data_inicio <= DATE('{data_fim_dt}')
               AND (data_fim IS NULL OR data_fim >= DATE('{data_inicio_dt}'))
             ORDER BY categoria, data_inicio
             """
             df = client.query(query).to_dataframe()
+            # Armazenar timestamp da carga
+            st.session_state.ultima_carga_ajustes = datetime.now()
             return df
         except Exception as e:
             st.warning(f"⚠️ Não foi possível carregar ajustes (waivers/descontos): {e}")
             return pd.DataFrame()
     
-    ajustes_ativos = carregar_ajustes_ativos(data_inicio, data_fim)
+    # Verificar se deve forçar recarga de ajustes
+    force_reload_ajustes = st.session_state.get('force_reload_ajustes', False)
+    if force_reload_ajustes:
+        carregar_ajustes_ativos.clear()
+        st.session_state.force_reload_ajustes = False
+    
+    ajustes_ativos = carregar_ajustes_ativos(data_inicio, data_fim, force_reload_ajustes)
+    
+    # Mostrar info sobre ajustes carregados
+    if not ajustes_ativos.empty:
+        ultima_carga = st.session_state.get('ultima_carga_ajustes', None)
+        if ultima_carga:
+            tempo_desde_carga = (datetime.now() - ultima_carga).total_seconds()
+            if tempo_desde_carga < 60:
+                st.info(f"📊 **{len(ajustes_ativos)} ajustes ativos** carregados há {int(tempo_desde_carga)}s")
+            else:
+                minutos = int(tempo_desde_carga // 60)
+                st.info(f"📊 **{len(ajustes_ativos)} ajustes ativos** carregados há {minutos}min")
     
     if not ajustes_ativos.empty:
         # Encontrar coluna de acumulado
@@ -579,7 +599,7 @@ if 'df' in st.session_state:
     df_exibir.rename(columns={col: colunas_desejadas[col] for col in colunas_existentes}, inplace=True)
     
     # Botões de ação e exportação
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
     
     with col1:
         # Verificar se há ajustes aplicados
@@ -589,12 +609,17 @@ if 'df' in st.session_state:
             st.info(f"📊 Exibindo **{len(df):,}** registros")
     
     with col2:
-        if st.button("🔄 Limpar Cache", use_container_width=True):
+        if st.button("🔄 Cache Geral", use_container_width=True):
             st.cache_data.clear()
             st.success("✅ Cache limpo!")
             st.rerun()
     
     with col3:
+        if st.button("🔃 Recarregar Ajustes", use_container_width=True, help="Força recarga de waivers e descontos"):
+            st.session_state.force_reload_ajustes = True
+            st.rerun()
+    
+    with col4:
         # Exportar CSV completo (todas as colunas)
         download_csv = df.to_csv(index=False).encode('utf-8')
         
@@ -610,7 +635,7 @@ if 'df' in st.session_state:
             use_container_width=True
         )
     
-    with col4:
+    with col5:
         # Exportar apenas dados filtrados exibidos na tela (colunas formatadas)
         download_filtrado = df_exibir.to_csv(index=False).encode('utf-8')
         
