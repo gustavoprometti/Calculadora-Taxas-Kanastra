@@ -370,6 +370,27 @@ if 'df' in st.session_state:
             (df_filtrado['date_ref'].dt.date <= data_fim)
         ]
     
+    # VERIFICAR ALTERAÇÕES PENDENTES DE APROVAÇÃO
+    @st.cache_data(ttl=60)
+    def verificar_alteracoes_pendentes():
+        """Verifica se existem alterações pendentes de aprovação"""
+        try:
+            client = get_bigquery_client()
+            query = """
+            SELECT 
+                COUNT(*) as total_pendente,
+                COUNT(DISTINCT solicitacao_id) as solicitacoes_pendentes
+            FROM `kanastra-live.finance.alteracoes_pendentes`
+            WHERE status = 'PENDENTE'
+            """
+            result = client.query(query).to_dataframe()
+            if not result.empty:
+                return result.iloc[0]['total_pendente'], result.iloc[0]['solicitacoes_pendentes']
+            return 0, 0
+        except Exception as e:
+            st.warning(f"⚠️ Não foi possível verificar alterações pendentes: {e}")
+            return 0, 0
+    
     # APLICAR WAIVERS E DESCONTOS APROVADOS do BigQuery
     @st.cache_data(ttl=60)  # Cache por 1 minuto (ajustes precisam aparecer rapidamente)
     def carregar_ajustes_ativos(data_inicio_dt, data_fim_dt, force_reload=False):
@@ -411,16 +432,86 @@ if 'df' in st.session_state:
     
     ajustes_ativos = carregar_ajustes_ativos(data_inicio, data_fim, force_reload_ajustes)
     
-    # Mostrar info sobre ajustes carregados
+    # Verificar alterações pendentes
+    total_pendente, solicitacoes_pendentes = verificar_alteracoes_pendentes()
+    
+    # AVISOS DE ALTERAÇÕES PENDENTES E AJUSTES ATIVOS
+    st.divider()
+    
+    col_aviso1, col_aviso2 = st.columns(2)
+    
+    with col_aviso1:
+        if total_pendente > 0:
+            st.error(
+                f"⚠️ **ATENÇÃO: {solicitacoes_pendentes} solicitação(ões) pendente(s) de aprovação** "
+                f"({total_pendente} alteração(ões) no total)\n\n"
+                f"❌ **Exportação bloqueada até aprovação**"
+            )
+        else:
+            st.success("✅ **Nenhuma alteração pendente de aprovação**")
+    
+    with col_aviso2:
+        if not ajustes_ativos.empty:
+            ultima_carga = st.session_state.get('ultima_carga_ajustes', None)
+            tempo_info = ""
+            if ultima_carga:
+                tempo_desde_carga = (datetime.now() - ultima_carga).total_seconds()
+                if tempo_desde_carga < 60:
+                    tempo_info = f" (carregados há {int(tempo_desde_carga)}s)"
+                else:
+                    minutos = int(tempo_desde_carga // 60)
+                    tempo_info = f" (carregados há {minutos}min)"
+            
+            st.info(f"📊 **{len(ajustes_ativos)} ajustes ativos** aplicados{tempo_info}")
+        else:
+            st.info("ℹ️ **Nenhum ajuste (waiver/desconto) ativo no período**")
+    
+    # PAINEL DE DETALHAMENTO DOS AJUSTES ATIVOS
     if not ajustes_ativos.empty:
-        ultima_carga = st.session_state.get('ultima_carga_ajustes', None)
-        if ultima_carga:
-            tempo_desde_carga = (datetime.now() - ultima_carga).total_seconds()
-            if tempo_desde_carga < 60:
-                st.info(f"📊 **{len(ajustes_ativos)} ajustes ativos** carregados há {int(tempo_desde_carga)}s")
-            else:
-                minutos = int(tempo_desde_carga // 60)
-                st.info(f"📊 **{len(ajustes_ativos)} ajustes ativos** carregados há {minutos}min")
+        with st.expander("📋 **Detalhes dos Ajustes Aplicados**", expanded=False):
+            # Agrupar por categoria
+            for categoria in ajustes_ativos['categoria'].unique():
+                df_cat = ajustes_ativos[ajustes_ativos['categoria'] == categoria]
+                
+                # Traduzir categoria
+                categoria_nome = {
+                    'waiver': '💰 Waivers',
+                    'desconto_juridico': '⚖️ Descontos Jurídicos',
+                    'desconto_comercial': '🤝 Descontos Comerciais'
+                }.get(categoria, categoria)
+                
+                st.markdown(f"### {categoria_nome} ({len(df_cat)})", unsafe_allow_html=True)
+                
+                for idx, ajuste in df_cat.iterrows():
+                    # Identificar fundo
+                    fundo = ajuste.get('fund_name') or f"ID {ajuste.get('fund_id')}"
+                    
+                    # Montar descrição do ajuste
+                    if ajuste['tipo_desconto'] == 'Percentual':
+                        descricao_valor = f"{ajuste['percentual_desconto']:.2f}% de desconto"
+                    else:
+                        descricao_valor = f"R$ {ajuste['valor_desconto']:,.2f}"
+                    
+                    # Período
+                    periodo = f"{ajuste['data_inicio'].strftime('%d/%m/%Y')} até "
+                    if pd.notnull(ajuste.get('data_fim')):
+                        periodo += ajuste['data_fim'].strftime('%d/%m/%Y')
+                    else:
+                        periodo += "vigência indefinida"
+                    
+                    # Serviço específico ou todos
+                    servico_info = f" - Serviço: {ajuste['servico']}" if ajuste.get('servico') else " - Todos os serviços"
+                    
+                    # Forma de aplicação
+                    forma = ajuste['forma_aplicacao']
+                    
+                    st.markdown(
+                        f"**{fundo}** | {descricao_valor} ({forma}){servico_info}  \n"
+                        f"📅 {periodo}  \n"
+                        f"_{ajuste.get('observacao', 'Sem observação')}_",
+                        unsafe_allow_html=True
+                    )
+                    st.markdown("---")
     
     if not ajustes_ativos.empty:
         # Encontrar coluna de acumulado
@@ -626,14 +717,24 @@ if 'df' in st.session_state:
         # Nome do arquivo indica se tem ajustes
         sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
         
-        st.download_button(
-            label="📥 CSV Completo",
-            data=download_csv,
-            file_name=f'calculadora_taxas{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-            mime='text/csv',
-            type="primary",
-            use_container_width=True
-        )
+        # Bloquear se há alterações pendentes
+        if total_pendente > 0:
+            st.button(
+                label="📥 CSV Completo",
+                use_container_width=True,
+                type="primary",
+                disabled=True,
+                help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes} solicitação(ões) pendente(s) de aprovação"
+            )
+        else:
+            st.download_button(
+                label="📥 CSV Completo",
+                data=download_csv,
+                file_name=f'calculadora_taxas{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                mime='text/csv',
+                type="primary",
+                use_container_width=True
+            )
     
     with col5:
         # Exportar apenas dados filtrados exibidos na tela (colunas formatadas)
@@ -642,13 +743,22 @@ if 'df' in st.session_state:
         # Nome do arquivo indica se tem ajustes
         sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
         
-        st.download_button(
-            label="📄 CSV Resumido",
-            data=download_filtrado,
-            file_name=f'calculadora_resumo{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-            mime='text/csv',
-            use_container_width=True
-        )
+        # Bloquear se há alterações pendentes
+        if total_pendente > 0:
+            st.button(
+                label="📄 CSV Resumido",
+                use_container_width=True,
+                disabled=True,
+                help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes} solicitação(ões) pendente(s) de aprovação"
+            )
+        else:
+            st.download_button(
+                label="📄 CSV Resumido",
+                data=download_filtrado,
+                file_name=f'calculadora_resumo{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                mime='text/csv',
+                use_container_width=True
+            )
     
     # Exibir tabela
     st.subheader("📋 Resultados da Query SQL")
