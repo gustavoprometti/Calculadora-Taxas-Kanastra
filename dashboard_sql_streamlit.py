@@ -718,6 +718,18 @@ if 'df' in st.session_state:
                         col_servico = 'Service' if 'Service' in df_filtrado.columns else 'servico'
                         mask_fundo = mask_fundo & (df_filtrado[col_servico] == servico)
                     
+                    # DEBUG: Mostrar info do ajuste sendo aplicado
+                    if mask_fundo.sum() > 0 and tipo_desconto == 'Percentual' and percentual == 100:
+                        st.sidebar.info(f"""
+                        🔍 **Debug Waiver 100%**
+                        - Fundo: {fund_identifier}
+                        - Serviço: {servico}
+                        - Percentual: {percentual}%
+                        - Período: {ajuste['data_inicio']} a {ajuste['data_fim']}
+                        - Registros afetados: {mask_fundo.sum()}
+                        - Forma: {forma_aplicacao}
+                        """)
+                    
                     if mask_fundo.sum() > 0:
                         # Calcular valor do ajuste baseado no tipo
                         if tipo_desconto == 'Percentual':
