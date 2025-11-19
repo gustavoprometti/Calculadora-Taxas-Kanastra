@@ -115,37 +115,6 @@ def get_bigquery_client():
     except Exception as e:
         raise Exception(f"Erro ao criar cliente BigQuery: {str(e)}")
 
-# Função para salvar histórico de waiver no BigQuery
-def salvar_waiver_bigquery(fund_name, valor_waiver, tipo_waiver, data_inicio, data_fim, usuario="usuario_kanastra"):
-    """Salva registro de waiver no BigQuery"""
-    client = get_bigquery_client()
-    
-    try:
-        waiver_id = str(uuid.uuid4())
-        data_aplicacao = datetime.now().isoformat()
-        
-        query = f"""
-        INSERT INTO `kanastra-live.finance.historico_waivers` 
-        (id, data_aplicacao, usuario, fund_name, valor_waiver, tipo_waiver, data_inicio, data_fim, observacao)
-        VALUES (
-            '{waiver_id}',
-            TIMESTAMP('{data_aplicacao}'),
-            '{usuario}',
-            '{fund_name}',
-            {valor_waiver},
-            '{tipo_waiver}',
-            DATE('{data_inicio}'),
-            DATE('{data_fim}'),
-            'Aplicado via Dashboard'
-        )
-        """
-        
-        client.query(query).result()
-        return True
-    except Exception as e:
-        st.error(f"❌ Erro ao salvar waiver no BigQuery: {e}")
-        return False
-
 # Sidebar - Logo e Filtros
 st.sidebar.image("https://www.kanastra.design/wordmark-green.svg", width=150)
 st.sidebar.markdown("---")
@@ -261,70 +230,6 @@ servico_selecionado = st.sidebar.selectbox(
 
 st.sidebar.divider()
 
-# Seção de Waiver
-st.sidebar.subheader("💰 Provisionar Waiver")
-
-# Seleção de fundos para waiver
-fundos_waiver = st.sidebar.multiselect(
-    "Selecione os fundos para Waiver:",
-    fundos_disponiveis[1:],  # Remove "Todos"
-    help="Escolha um ou mais fundos para aplicar waiver"
-)
-
-# Inputs de valor e tipo para cada fundo
-valores_waiver = {}
-tipos_waiver = {}
-for fundo in fundos_waiver:
-    st.sidebar.write(f"**{fundo}:**")
-    
-    col1, col2 = st.sidebar.columns([2, 1])
-    
-    with col1:
-        valores_waiver[fundo] = st.number_input(
-            f"Valor (R$):",
-            min_value=0.0,
-            value=0.0,
-            step=100.0,
-            format="%.2f",
-            key=f"valor_waiver_{fundo}",
-            label_visibility="collapsed"
-        )
-    
-    with col2:
-        tipos_waiver[fundo] = st.selectbox(
-            f"Tipo:",
-            ["Provisionado", "Não Provisionado"],
-            key=f"tipo_waiver_{fundo}",
-            label_visibility="collapsed"
-        )
-    
-    st.sidebar.caption(f"💰 R$ {valores_waiver[fundo]:,.2f} - {tipos_waiver[fundo]}")
-    st.sidebar.divider()
-
-# Botões de ação
-col_btn1, col_btn2 = st.sidebar.columns(2)
-
-with col_btn1:
-    # Botão para aplicar waiver
-    aplicar_waiver = st.button(
-        "💾 Aplicar",
-        type="secondary",
-        use_container_width=True,
-        disabled=(not fundos_waiver or all(v <= 0 for v in valores_waiver.values())),
-        help="Aplicar o waiver aos fundos selecionados"
-    )
-
-with col_btn2:
-    # Botão para remover waiver
-    remover_waiver = st.button(
-        "🗑️ Remover",
-        type="secondary",
-        use_container_width=True,
-        help="Remover todos os waivers aplicados"
-    )
-
-st.sidebar.divider()
-
 # Inicializar session_state para executar automaticamente na primeira vez
 if 'auto_executed' not in st.session_state:
     st.session_state['auto_executed'] = False
@@ -436,25 +341,6 @@ if st.session_state.get('execute_query', False) or not st.session_state['auto_ex
         else:
             st.warning("⚠️ Query retornou 0 registros")
 
-# Aplicar Waiver se solicitado
-if aplicar_waiver and fundos_waiver and any(v > 0 for v in valores_waiver.values()):
-    st.session_state['waiver_aplicado'] = {
-        'fundos': fundos_waiver,
-        'valores': valores_waiver,
-        'tipos': tipos_waiver
-    }
-    st.sidebar.success("✅ Waiver será aplicado!")
-    st.rerun()
-
-# Remover Waiver se solicitado
-if remover_waiver:
-    if 'waiver_aplicado' in st.session_state:
-        del st.session_state['waiver_aplicado']
-        st.sidebar.success("✅ Waiver removido!")
-        st.rerun()
-    else:
-        st.sidebar.warning("⚠️ Nenhum waiver ativo para remover")
-
 # Mostrar resultados se existirem
 if 'df' in st.session_state:
     df_original = st.session_state.get('df_original', st.session_state['df'])
@@ -484,47 +370,76 @@ if 'df' in st.session_state:
             (df_filtrado['date_ref'].dt.date <= data_fim)
         ]
     
-    # APLICAR WAIVER se configurado
-    waiver_info = st.session_state.get('waiver_aplicado', None)
+    # APLICAR WAIVERS APROVADOS do histórico BigQuery
+    @st.cache_data(ttl=300)
+    def carregar_waivers_ativos(data_inicio_dt, data_fim_dt):
+        """Carrega waivers aprovados do histórico que se aplicam ao período"""
+        try:
+            client = get_bigquery_client()
+            query = f"""
+            SELECT 
+                fund_name,
+                valor_waiver,
+                tipo_waiver,
+                data_inicio,
+                data_fim
+            FROM `kanastra-live.finance.historico_waivers`
+            WHERE data_inicio <= DATE('{data_fim_dt}')
+              AND data_fim >= DATE('{data_inicio_dt}')
+            """
+            df = client.query(query).to_dataframe()
+            return df
+        except Exception as e:
+            st.warning(f"⚠️ Não foi possível carregar waivers: {e}")
+            return pd.DataFrame()
     
-    if waiver_info and waiver_info['fundos']:
+    waivers_ativos = carregar_waivers_ativos(data_inicio, data_fim)
+    
+    if not waivers_ativos.empty:
         # Encontrar coluna de acumulado
         col_acumulado = None
         for col in df_filtrado.columns:
             if 'acumulado' in col.lower():
                 col_acumulado = col
                 break
+        
         if col_acumulado:
-            for fundo in waiver_info['fundos']:
-                valor = waiver_info['valores'].get(fundo, 0)
-                tipo_fundo = waiver_info['tipos'].get(fundo, "Provisionado")
+            waivers_aplicados = []
+            for _, waiver in waivers_ativos.iterrows():
+                fund_name = waiver['fund_name']
+                valor = waiver['valor_waiver']
+                tipo_waiver = waiver['tipo_waiver']
                 
                 if valor > 0:
-                    mask_fundo = (df_filtrado['fund_name'] == fundo)
-                    
-                    if tipo_fundo == "Provisionado":
-                        # Provisionado: distribuir proporcionalmente por todos os registros do fundo
-                        qtd_registros = mask_fundo.sum()
-                        valor_por_registro = valor / qtd_registros if qtd_registros > 0 else 0
-                        
-                        # Aplicar ao acumulado
-                        df_filtrado.loc[mask_fundo, col_acumulado] = (
-                            df_filtrado.loc[mask_fundo, col_acumulado] - valor_por_registro
+                    # Filtrar registros do fundo no período do waiver
+                    mask_fundo = (df_filtrado['fund_name'] == fund_name)
+                    if 'date_ref' in df_filtrado.columns:
+                        mask_fundo = mask_fundo & (
+                            (df_filtrado['date_ref'].dt.date >= waiver['data_inicio']) &
+                            (df_filtrado['date_ref'].dt.date <= waiver['data_fim'])
                         )
-                        st.info(f"💰 **{fundo}** - Provisionado: R$ {valor_por_registro:,.2f}/registro × {qtd_registros} registros = R$ {valor:,.2f}")
-                    else:
-                        # Não Provisionado: aplicar tudo no último registro do fundo
-                        idx_ultimo = df_filtrado[mask_fundo].index.max()
-                        if pd.notnull(idx_ultimo):
-                            # Aplicar ao acumulado
-                            df_filtrado.at[idx_ultimo, col_acumulado] = (
-                                df_filtrado.at[idx_ultimo, col_acumulado] - valor
+                    
+                    if mask_fundo.sum() > 0:
+                        if tipo_waiver == "Provisionado":
+                            # Provisionado: distribuir proporcionalmente
+                            qtd_registros = mask_fundo.sum()
+                            valor_por_registro = valor / qtd_registros if qtd_registros > 0 else 0
+                            
+                            df_filtrado.loc[mask_fundo, col_acumulado] = (
+                                df_filtrado.loc[mask_fundo, col_acumulado] - valor_por_registro
                             )
-                            st.info(f"💰 **{fundo}** - Não Provisionado: R$ {valor:,.2f} no último registro")
+                            waivers_aplicados.append(f"{fund_name}: R$ {valor:,.2f} Provisionado")
                         else:
-                            st.warning(f"⚠️ Nenhum registro encontrado para o fundo {fundo}")
-        else:
-            st.warning("⚠️ Coluna 'acumulado' não encontrada nos dados")
+                            # Não Provisionado: aplicar no último registro
+                            idx_ultimo = df_filtrado[mask_fundo].index.max()
+                            if pd.notnull(idx_ultimo):
+                                df_filtrado.at[idx_ultimo, col_acumulado] = (
+                                    df_filtrado.at[idx_ultimo, col_acumulado] - valor
+                                )
+                                waivers_aplicados.append(f"{fund_name}: R$ {valor:,.2f} Não Provisionado")
+            
+            if waivers_aplicados:
+                st.success(f"✅ **Waivers Aplicados ({len(waivers_aplicados)}):** {' | '.join(waivers_aplicados)}")
     
     # Usar o DataFrame filtrado
     df = df_filtrado
@@ -544,15 +459,6 @@ if 'df' in st.session_state:
             tempo_txt = f"{segundos}s atrás"
         
         st.info(f"📅 **Última atualização:** {ultima_atualizacao.strftime('%d/%m/%Y às %H:%M:%S')} ({tempo_txt}) | ⏱️ Tempo de execução: {tempo_execucao:.2f}s")
-    
-    # Alerta se waiver está ativo
-    if waiver_info and waiver_info.get('valores') and any(v > 0 for v in waiver_info['valores'].values()):
-        waivers_txt = []
-        for fundo in waiver_info['fundos']:
-            if waiver_info['valores'][fundo] > 0:
-                tipo = waiver_info['tipos'].get(fundo, "Provisionado")
-                waivers_txt.append(f"{fundo}: R$ {waiver_info['valores'][fundo]:,.2f} ({tipo})")
-        st.success(f"✅ **Waiver Ativo:** {' | '.join(waivers_txt)}")
     
     # Estatísticas no topo
     col1, col2, col3, col4 = st.columns(4)
@@ -604,67 +510,14 @@ if 'df' in st.session_state:
     with col3:
         download_csv = df.to_csv(index=False).encode('utf-8')
         
-        # Botão de exportar CSV com salvamento de waiver
-        # Usar on_click para salvar waiver ANTES do download
-        if 'waiver_aplicado' in st.session_state:
-            # Callback para salvar waiver
-            def salvar_waiver_callback():
-                waiver_data = st.session_state['waiver_aplicado']
-                fundos = waiver_data['fundos']
-                valores = waiver_data['valores']
-                tipos = waiver_data['tipos']
-                
-                sucesso_total = True
-                mensagens = []
-                
-                for fundo in fundos:
-                    valor = valores.get(fundo, 0)
-                    tipo = tipos.get(fundo, "Provisionado")
-                    
-                    if valor > 0:
-                        st.write(f"🔄 Salvando waiver: {fundo} - R$ {valor:,.2f} - {tipo}")
-                        if salvar_waiver_bigquery(fundo, valor, tipo, data_inicio, data_fim):
-                            mensagens.append(f"✅ {fundo}: R$ {valor:,.2f} salvo!")
-                        else:
-                            sucesso_total = False
-                            mensagens.append(f"❌ {fundo}: Erro ao salvar")
-                
-                st.session_state['waiver_salvo_mensagens'] = mensagens
-                st.session_state['waiver_salvo_sucesso'] = sucesso_total
-            
-            # Botão com callback
-            st.download_button(
-                label="📥 Exportar CSV + Salvar Waiver",
-                data=download_csv,
-                file_name=f'calculadora_taxas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-                mime='text/csv',
-                type="primary",
-                use_container_width=True,
-                on_click=salvar_waiver_callback
-            )
-            
-            # Mostrar mensagens se houver
-            if 'waiver_salvo_mensagens' in st.session_state:
-                for msg in st.session_state['waiver_salvo_mensagens']:
-                    if "✅" in msg:
-                        st.success(msg)
-                    else:
-                        st.error(msg)
-                
-                # Limpar mensagens após mostrar
-                del st.session_state['waiver_salvo_mensagens']
-                if 'waiver_salvo_sucesso' in st.session_state:
-                    del st.session_state['waiver_salvo_sucesso']
-        else:
-            # Sem waiver, botão normal
-            st.download_button(
-                label="📥 Exportar CSV",
-                data=download_csv,
-                file_name=f'calculadora_taxas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-                mime='text/csv',
-                type="primary",
-                use_container_width=True
-            )
+        st.download_button(
+            label="📥 Exportar CSV",
+            data=download_csv,
+            file_name=f'calculadora_taxas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            mime='text/csv',
+            type="primary",
+            use_container_width=True
+        )
     
     # Exibir tabela
     st.subheader("📋 Resultados da Query SQL")
