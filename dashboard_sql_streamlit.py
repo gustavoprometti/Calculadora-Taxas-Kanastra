@@ -720,14 +720,20 @@ if 'df' in st.session_state:
                     
                     # DEBUG: Mostrar info do ajuste sendo aplicado
                     if mask_fundo.sum() > 0 and tipo_desconto == 'Percentual' and percentual == 100:
-                        st.sidebar.info(f"""
+                        registros_afetados = df_filtrado[mask_fundo]
+                        datas_str = registros_afetados['date_ref'].dt.strftime('%d/%m/%Y').tolist()
+                        valores_antes = registros_afetados[col_acumulado].tolist()
+                        
+                        st.sidebar.warning(f"""
                         🔍 **Debug Waiver 100%**
                         - Fundo: {fund_identifier}
                         - Serviço: {servico}
                         - Percentual: {percentual}%
-                        - Período: {ajuste['data_inicio']} a {ajuste['data_fim']}
+                        - Período waiver: {ajuste['data_inicio']} a {ajuste['data_fim']}
                         - Registros afetados: {mask_fundo.sum()}
                         - Forma: {forma_aplicacao}
+                        - Datas: {', '.join(datas_str[:5])}{'...' if len(datas_str) > 5 else ''}
+                        - Valores antes: {[f'R$ {v:,.2f}' for v in valores_antes[:3]]}
                         """)
                     
                     if mask_fundo.sum() > 0:
