@@ -473,6 +473,10 @@ if 'df' in st.session_state:
     # Verificar alterações pendentes - SEM CACHE para garantir precisão no bloqueio
     total_pendente, solicitacoes_pendentes = verificar_alteracoes_pendentes()
     
+    # DEBUG: Mostrar valor de verificação (remover após teste)
+    if total_pendente > 0:
+        st.warning(f"🔴 DEBUG: total_pendente = {total_pendente}, solicitacoes_pendentes = {solicitacoes_pendentes}")
+    
     # AVISOS DE ALTERAÇÕES PENDENTES E AJUSTES ATIVOS
     st.divider()
     
@@ -746,6 +750,9 @@ if 'df' in st.session_state:
     # Botões de ação e exportação
     col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
     
+    # VERIFICAÇÃO DUPLA: Re-verificar pendentes imediatamente antes de exportar
+    total_pendente_atual, solicitacoes_pendentes_atual = verificar_alteracoes_pendentes()
+    
     with col1:
         # Verificar se há ajustes aplicados
         if not ajustes_ativos.empty:
@@ -766,13 +773,13 @@ if 'df' in st.session_state:
     
     with col4:
         # VALIDAÇÃO DE SEGURANÇA: Bloquear exportação se há alterações pendentes
-        if total_pendente > 0:
+        if total_pendente_atual > 0:
             st.button(
                 label="📥 CSV Completo",
                 use_container_width=True,
                 type="primary",
                 disabled=True,
-                help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes} solicitação(ões) pendente(s) de aprovação"
+                help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes_atual} solicitação(ões) pendente(s) de aprovação"
             )
         else:
             # Gerar CSV apenas se não houver pendências (camada extra de segurança)
@@ -793,12 +800,12 @@ if 'df' in st.session_state:
     
     with col5:
         # VALIDAÇÃO DE SEGURANÇA: Bloquear exportação se há alterações pendentes
-        if total_pendente > 0:
+        if total_pendente_atual > 0:
             st.button(
                 label="📄 CSV Resumido",
                 use_container_width=True,
                 disabled=True,
-                help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes} solicitação(ões) pendente(s) de aprovação"
+                help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes_atual} solicitação(ões) pendente(s) de aprovação"
             )
         else:
             # Gerar CSV apenas se não houver pendências (camada extra de segurança)
