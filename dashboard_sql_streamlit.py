@@ -872,8 +872,17 @@ if 'df' in st.session_state:
             st.rerun()
     
     with col3:
-        if st.button("🔃 Recarregar Ajustes", width='stretch', help="Força recarga de waivers e descontos"):
+        if st.button("🔃 Recarregar Tudo", width='stretch', help="Recarrega query principal + waivers e descontos"):
+            # Limpar todos os caches
+            carregar_ajustes_ativos.clear()
+            obter_timestamp_ultima_modificacao.clear()
+            executar_query_bigquery.clear()
+            
+            # Marcar para executar query novamente
+            st.session_state['execute_query'] = True
             st.session_state.force_reload_ajustes = True
+            
+            st.success("🔄 Recarregando dados...")
             st.rerun()
     
     with col4:
