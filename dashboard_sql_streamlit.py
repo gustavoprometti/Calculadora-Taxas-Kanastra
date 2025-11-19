@@ -758,7 +758,7 @@ if 'df' in st.session_state:
     df_exibir.rename(columns={col: colunas_desejadas[col] for col in colunas_existentes}, inplace=True)
     
     # Botões de ação e exportação
-    col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
     
     # VERIFICAÇÃO DUPLA: Re-verificar pendentes imediatamente antes de exportar
     total_pendente_atual, solicitacoes_pendentes_atual = verificar_alteracoes_pendentes()
@@ -785,35 +785,9 @@ if 'df' in st.session_state:
         # VALIDAÇÃO DE SEGURANÇA: Bloquear exportação se há alterações pendentes
         if total_pendente_atual > 0:
             st.button(
-                label="📥 CSV Completo",
+                label="📥 Exportar CSV",
                 width='stretch',
                 type="primary",
-                disabled=True,
-                help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes_atual} solicitação(ões) pendente(s) de aprovação"
-            )
-        else:
-            # Gerar CSV apenas se não houver pendências (camada extra de segurança)
-            download_csv = df.to_csv(index=False).encode('utf-8')
-            
-            # Nome do arquivo indica se tem ajustes
-            sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
-            
-            st.download_button(
-                label="📥 CSV Completo",
-                data=download_csv,
-                file_name=f'calculadora_taxas{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-                mime='text/csv',
-                type="primary",
-                width='stretch',
-                help="✅ Exportar todas as colunas com ajustes aplicados"
-            )
-    
-    with col5:
-        # VALIDAÇÃO DE SEGURANÇA: Bloquear exportação se há alterações pendentes
-        if total_pendente_atual > 0:
-            st.button(
-                label="📄 CSV Resumido",
-                width='stretch',
                 disabled=True,
                 help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes_atual} solicitação(ões) pendente(s) de aprovação"
             )
@@ -825,12 +799,13 @@ if 'df' in st.session_state:
             sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
             
             st.download_button(
-                label="📄 CSV Resumido",
+                label="📥 Exportar CSV",
                 data=download_filtrado,
-                file_name=f'calculadora_resumo{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                file_name=f'calculadora_taxas{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
                 mime='text/csv',
+                type="primary",
                 width='stretch',
-                help="✅ Exportar colunas formatadas com ajustes aplicados"
+                help="✅ Exportar dados com ajustes aplicados"
             )
     
     # Exibir tabela
