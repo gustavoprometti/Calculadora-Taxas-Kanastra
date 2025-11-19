@@ -401,7 +401,7 @@ def carregar_alteracoes_pendentes():
         return []
 
 def carregar_historico_alteracoes(limit=100):
-    """Carrega histórico de alterações já aprovadas"""
+    """Carrega histórico de alterações já aprovadas (waivers e descontos da tabela descontos)"""
     client = get_bigquery_client()
     if client is None:
         return pd.DataFrame()
@@ -409,14 +409,22 @@ def carregar_historico_alteracoes(limit=100):
     try:
         query = f"""
         SELECT 
-            data_aprovacao,
-            aprovador_por,
-            tipo_alteracao,
-            tabela,
-            dados,
-            origem
-        FROM `kanastra-live.finance.historico_alteracoes`
-        ORDER BY data_aprovacao DESC
+            data_aplicacao as data_aprovacao,
+            usuario as aprovador_por,
+            categoria,
+            fund_id,
+            fund_name,
+            tipo_desconto,
+            valor_desconto,
+            percentual_desconto,
+            forma_aplicacao,
+            servico,
+            origem,
+            data_inicio,
+            data_fim,
+            observacao
+        FROM `kanastra-live.finance.descontos`
+        ORDER BY data_aplicacao DESC
         LIMIT {limit}
         """
         
@@ -2097,7 +2105,7 @@ else:
 # HISTÓRICO DE ALTERAÇÕES APROVADAS (visível para aprovadores)
 if perfil == "aprovador":
     st.markdown("---")
-    st.subheader("📜 Histórico de Alterações Aprovadas")
+    st.subheader("📜 Histórico de Alterações Aprovadas (Waivers e Descontos)")
     
     # Carregar histórico
     df_historico = carregar_historico_alteracoes(limit=50)
@@ -2106,53 +2114,45 @@ if perfil == "aprovador":
         # Preparar dados para exibição
         df_exibir = df_historico.copy()
         
-        # Processar coluna de dados (JSON)
+        # Processar dados para criar resumo
         dados_processados = []
         for _, row in df_exibir.iterrows():
             try:
-                dados_dict = json.loads(row['dados']) if isinstance(row['dados'], str) else row['dados']
+                # Identificar fundo
+                fundo = row.get('fund_name') or f"ID {row.get('fund_id', 'N/A')}"
                 
-                # Extrair informações principais dependendo do tipo
-                if row['tabela'] == 'waiver' or row.get('tipo_alteracao') == 'waiver':
-                    resumo = f"Fundo: {dados_dict.get('fund_name', 'N/A')} | Valor: R$ {dados_dict.get('valor_waiver', dados_dict.get('valor_desconto', 0)):,.2f}"
-                elif row['tabela'] == 'desconto' or row.get('tipo_alteracao') == 'desconto':
-                    fundo = dados_dict.get('fund_name') or f"ID {dados_dict.get('fund_id', 'N/A')}"
-                    if dados_dict.get('tipo_desconto') == 'Percentual':
-                        resumo = f"Fundo: {fundo} | {dados_dict.get('percentual_desconto', 0)}% | {dados_dict.get('forma_aplicacao', 'N/A')}"
-                    else:
-                        resumo = f"Fundo: {fundo} | R$ {dados_dict.get('valor_desconto', 0):,.2f} | {dados_dict.get('forma_aplicacao', 'N/A')}"
-                elif row['tabela'] in ['fee_minimo', 'fee_variavel']:
-                    resumo = f"Fund ID: {dados_dict.get('fund_id', 'N/A')} | Serviço: {dados_dict.get('servico', 'N/A')} | Faixa: {dados_dict.get('faixa', 'N/A')}"
+                # Criar resumo baseado no tipo
+                if row.get('tipo_desconto') == 'Percentual':
+                    valor_info = f"{row.get('percentual_desconto', 0):.2f}%"
                 else:
-                    resumo = "Dados diversos"
+                    valor_info = f"R$ {row.get('valor_desconto', 0):,.2f}"
                 
+                forma = row.get('forma_aplicacao', 'N/A')
+                servico = row.get('servico', 'Todos os serviços')
+                periodo = f"{row['data_inicio'].strftime('%d/%m/%Y')} até "
+                if pd.notnull(row.get('data_fim')):
+                    periodo += row['data_fim'].strftime('%d/%m/%Y')
+                else:
+                    periodo += "vigência indefinida"
+                
+                resumo = f"Fundo: {fundo} | Valor: {valor_info} | {forma} | Serviço: {servico} | {periodo}"
                 dados_processados.append(resumo)
-            except:
-                dados_processados.append("Erro ao processar dados")
+            except Exception as e:
+                dados_processados.append(f"Erro ao processar: {str(e)}")
         
-        df_exibir['Resumo'] = dados_processados
+        df_exibir['Detalhes'] = dados_processados
         
-        # Traduzir tipo_alteracao
-        tipo_map = {
+        # Traduzir categoria
+        categoria_map = {
             'waiver': '💰 Waiver',
-            'desconto': '🎯 Desconto',
-            'taxa_minima': '📊 Taxa Mínima',
-            'taxa_variavel': '📈 Taxa Variável',
-            'INSERT': '➕ Inserção',
-            'UPDATE': '✏️ Atualização'
+            'desconto_juridico': '⚖️ Desconto Jurídico',
+            'desconto_comercial': '🤝 Desconto Comercial'
         }
-        df_exibir['Tipo'] = df_exibir['tipo_alteracao'].map(tipo_map).fillna(df_exibir['tipo_alteracao'])
-        
-        # Traduzir origem
-        origem_map = {
-            'juridico': '⚖️ Jurídico',
-            'comercial': '🤝 Comercial'
-        }
-        df_exibir['Origem'] = df_exibir['origem'].map(origem_map).fillna(df_exibir['origem'])
+        df_exibir['Tipo'] = df_exibir['categoria'].map(categoria_map).fillna(df_exibir['categoria'])
         
         # Selecionar e renomear colunas para exibição
-        df_final = df_exibir[['data_aprovacao', 'aprovador_por', 'Tipo', 'Resumo', 'Origem']].copy()
-        df_final.columns = ['Data Aprovação', 'Aprovador', 'Tipo', 'Detalhes', 'Origem']
+        df_final = df_exibir[['data_aprovacao', 'aprovador_por', 'Tipo', 'Detalhes', 'observacao']].copy()
+        df_final.columns = ['Data Aplicação', 'Usuário', 'Tipo', 'Detalhes', 'Observação']
         
         # Exibir tabela
         st.dataframe(
@@ -2161,18 +2161,18 @@ if perfil == "aprovador":
             height=400,
             hide_index=True,
             column_config={
-                'Data Aprovação': st.column_config.DatetimeColumn(
-                    'Data Aprovação',
+                'Data Aplicação': st.column_config.DatetimeColumn(
+                    'Data Aplicação',
                     format="DD/MM/YYYY HH:mm:ss"
                 ),
-                'Aprovador': st.column_config.TextColumn('Aprovador', width="medium"),
+                'Usuário': st.column_config.TextColumn('Usuário', width="small"),
                 'Tipo': st.column_config.TextColumn('Tipo', width="medium"),
                 'Detalhes': st.column_config.TextColumn('Detalhes', width="large"),
-                'Origem': st.column_config.TextColumn('Origem', width="small")
+                'Observação': st.column_config.TextColumn('Observação', width="medium")
             }
         )
         
-        st.caption(f"📊 Exibindo últimas 50 alterações aprovadas")
+        st.caption(f"📊 Exibindo últimas 50 alterações aprovadas (waivers e descontos ativos)")
     else:
         st.info("ℹ️ Nenhuma alteração aprovada no histórico ainda")
 
