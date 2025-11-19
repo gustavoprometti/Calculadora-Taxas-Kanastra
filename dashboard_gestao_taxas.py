@@ -220,7 +220,7 @@ def carregar_fundos_completos():
             id as fund_id,
             name as fund_name,
             government_id as cnpj,
-            client
+            name as client
         FROM `kanastra-live.hub.funds` 
         WHERE name IS NOT NULL 
         ORDER BY name
