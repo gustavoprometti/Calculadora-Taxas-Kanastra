@@ -371,7 +371,7 @@ if 'df' in st.session_state:
         ]
     
     # SISTEMA DE INVALIDAÇÃO DE CACHE INTELIGENTE
-    @st.cache_data(ttl=300)  # Cache de 5 minutos para timestamp
+    @st.cache_data(ttl=60)  # Cache de 1 minuto para timestamp (precisa ser rápido para detectar aprovações)
     def obter_timestamp_ultima_modificacao():
         """Obtém timestamp da última modificação em alterações pendentes e ajustes"""
         try:
@@ -384,6 +384,9 @@ if 'df' in st.session_state:
                 UNION ALL
                 SELECT MAX(data_solicitacao) as timestamp_mod 
                 FROM `kanastra-live.finance.alteracoes_pendentes`
+                UNION ALL
+                SELECT MAX(data_aprovacao) as timestamp_mod
+                FROM `kanastra-live.finance.historico_alteracoes`
             )
             """
             result = client.query(query).to_dataframe()
@@ -394,12 +397,11 @@ if 'df' in st.session_state:
             return datetime.now()
     
     # VERIFICAR ALTERAÇÕES PENDENTES DE APROVAÇÃO
-    @st.cache_data(ttl=3600)  # Cache de 1 hora (invalidado por timestamp)
-    def verificar_alteracoes_pendentes(cache_key):
+    # SEM CACHE - sempre consulta valores atuais (query rápida, crítica para bloqueio de exportação)
+    def verificar_alteracoes_pendentes():
         """Verifica se existem alterações pendentes de aprovação
         
-        Args:
-            cache_key: Timestamp usado para invalidar cache quando há modificações
+        Esta função NÃO usa cache para garantir que bloqueios de exportação sejam sempre precisos.
         """
         try:
             client = get_bigquery_client()
@@ -455,21 +457,21 @@ if 'df' in st.session_state:
             st.warning(f"⚠️ Não foi possível carregar ajustes (waivers/descontos): {e}")
             return pd.DataFrame()
     
-    # Obter timestamp de última modificação (atualiza a cada 5 min, mas força recarga se houver mudanças)
+    # Obter timestamp de última modificação (atualiza a cada 1 min, mas força recarga se houver mudanças)
     timestamp_modificacao = obter_timestamp_ultima_modificacao()
     
     # Verificar se deve forçar recarga de ajustes (mantém funcionalidade de botão manual)
     force_reload_ajustes = st.session_state.get('force_reload_ajustes', False)
     if force_reload_ajustes:
         carregar_ajustes_ativos.clear()
-        verificar_alteracoes_pendentes.clear()
+        obter_timestamp_ultima_modificacao.clear()
         st.session_state.force_reload_ajustes = False
     
     # Carregar dados usando timestamp como cache key (invalida automaticamente quando há alterações)
     ajustes_ativos = carregar_ajustes_ativos(data_inicio, data_fim, timestamp_modificacao)
     
-    # Verificar alterações pendentes usando mesmo timestamp
-    total_pendente, solicitacoes_pendentes = verificar_alteracoes_pendentes(timestamp_modificacao)
+    # Verificar alterações pendentes - SEM CACHE para garantir precisão no bloqueio
+    total_pendente, solicitacoes_pendentes = verificar_alteracoes_pendentes()
     
     # AVISOS DE ALTERAÇÕES PENDENTES E AJUSTES ATIVOS
     st.divider()
