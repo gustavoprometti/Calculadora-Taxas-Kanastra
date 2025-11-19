@@ -413,10 +413,23 @@ if 'df' in st.session_state:
             WHERE status = 'PENDENTE'
             """
             result = client.query(query).to_dataframe()
+            
+            # DEBUG: Mostrar resultado da query
+            st.sidebar.write(f"DEBUG Query Result: {result.to_dict() if not result.empty else 'EMPTY'}")
+            
             if not result.empty:
-                return result.iloc[0]['total_pendente'], result.iloc[0]['solicitacoes_pendentes']
+                total = int(result.iloc[0]['total_pendente'])
+                solicitacoes = int(result.iloc[0]['solicitacoes_pendentes'])
+                
+                # DEBUG: Mostrar valores convertidos
+                st.sidebar.write(f"DEBUG Valores: total={total}, solicitacoes={solicitacoes}")
+                
+                return total, solicitacoes
+            
+            st.sidebar.write("DEBUG: DataFrame vazio, retornando (0, 0)")
             return 0, 0
         except Exception as e:
+            st.sidebar.error(f"⚠️ ERRO na verificação: {str(e)}")
             st.warning(f"⚠️ Não foi possível verificar alterações pendentes: {e}")
             return 0, 0
     
