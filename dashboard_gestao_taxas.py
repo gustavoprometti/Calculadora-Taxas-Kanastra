@@ -401,463 +401,570 @@ with col_user2:
 st.markdown("---")
 
 # =======================
-# SEÇÃO 1: SELEÇÃO E CARREGAMENTO
+# NAVEGAÇÃO POR ABAS
 # =======================
 
-st.subheader("📋 Selecione e Carregue os Dados")
+# Criar abas na sidebar
+st.sidebar.markdown("---")
+st.sidebar.header("📑 Navegação")
 
-opcoes_tabela = {
-    "Taxa Mínima": "fee_minimo",
-    "Taxa Variável": "fee_variavel"
-}
+# Seleção de aba
+aba_selecionada = st.sidebar.radio(
+    "Selecione o painel:",
+    [
+        "📋 Criação/Alteração de Taxas - Regulamento",
+        "💰 Waivers",
+        "🎯 Descontos"
+    ],
+    key="aba_navegacao"
+)
 
-col1, col2 = st.columns([2, 1])
-
-with col1:
-    tabela_display = st.selectbox(
-        "Selecione o Tipo de Taxa:",
-        list(opcoes_tabela.keys()),
-        key="select_tabela"
-    )
-    tabela = opcoes_tabela[tabela_display]
-
-with col2:
-    if st.button("📊 Carregar Dados", use_container_width=True, type="primary"):
-        # Limpar cache antes de carregar novos dados
-        carregar_dados_bigquery.clear()
-        
-        with st.spinner("Carregando..."):
-            df = carregar_dados_bigquery(tabela)
-            if df is not None and not df.empty:
-                st.session_state.dados_originais = df.copy()
-                st.session_state.dados_editados = df.copy()
-                st.session_state.tabela_selecionada = tabela
-                st.success(f"✅ {len(df)} registros carregados!")
-                
-
-            elif df is not None:
-                st.warning("⚠️ Tabela vazia")
-            else:
-                st.error("❌ Erro ao carregar")
-
-st.markdown("---")
+st.sidebar.markdown("---")
 
 # =======================
-# SEÇÃO 2: ESCOLHA DA AÇÃO E FORMULÁRIOS
+# ABA 1: CRIAÇÃO/ALTERAÇÃO DE TAXAS - REGULAMENTO
 # =======================
 
-if st.session_state.dados_editados is not None:
-    # VALIDAÇÃO CRÍTICA: Verificar se a tabela selecionada corresponde aos dados carregados
-    if st.session_state.tabela_selecionada != tabela:
-        st.error("❌ **ATENÇÃO: Incompatibilidade detectada!**")
-        st.warning(f"⚠️ Você selecionou **'{tabela_display}'** mas os dados carregados são de **'{[k for k, v in opcoes_tabela.items() if v == st.session_state.tabela_selecionada][0]}'**")
-        st.info("👉 **SOLUÇÃO:** Clique no botão '📊 Carregar Dados' acima para carregar os dados corretos.")
-        
-        # Botão para forçar recarga
-        if st.button("🔄 Recarregar Dados Corretos", type="primary"):
-            carregar_dados_bigquery.clear()
-            df = carregar_dados_bigquery(tabela)
-            if df is not None and not df.empty:
-                st.session_state.dados_originais = df.copy()
-                st.session_state.dados_editados = df.copy()
-                st.session_state.tabela_selecionada = tabela
-                st.success(f"✅ {len(df)} registros de {tabela_display} carregados!")
-                st.rerun()
-        st.stop()  # NÃO MOSTRAR MAIS NADA ATÉ CORRIGIR
+if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
     
-    st.subheader("🔧 Escolha a Ação")
-    
-    acao = st.radio(
-        "O que deseja fazer?",
-        ["Criar Nova Taxa", "Editar Taxa Existente"],
-        key="radio_acao",
-        horizontal=True
-    )
-    
+    st.header("📋 Criação/Alteração de Taxas - Regulamento")
     st.markdown("---")
     
     # =======================
-    # SEÇÃO 3: FORMULÁRIOS ESPECÍFICOS (4 DIFERENTES)
+    # SEÇÃO 1: SELEÇÃO E CARREGAMENTO
     # =======================
-    
-    # FORMULÁRIO 1: Taxa Mínima + Criar
-    if st.session_state.tabela_selecionada == "fee_minimo" and acao == "Criar Nova Taxa":
-        st.subheader("➕ Criar Nova Taxa Mínima")
-        
-        with st.form("form_criar_taxa_minima"):
-            st.markdown("### 📝 Preencha os dados da nova taxa")
-            st.info("ℹ️ A taxa mínima será aplicada independente do PL. Serão criadas automaticamente 2 linhas (faixa 0 e faixa máxima).")
+
+    st.subheader("📋 Selecione e Carregue os Dados")
+
+    opcoes_tabela = {
+        "Taxa Mínima": "fee_minimo",
+        "Taxa Variável": "fee_variavel"
+    }
+
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        tabela_display = st.selectbox(
+            "Selecione o Tipo de Taxa:",
+            list(opcoes_tabela.keys()),
+            key="select_tabela"
+        )
+        tabela = opcoes_tabela[tabela_display]
+
+    with col2:
+        if st.button("📊 Carregar Dados", use_container_width=True, type="primary"):
+            # Limpar cache antes de carregar novos dados
+            carregar_dados_bigquery.clear()
             
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                fund_id = st.number_input("Fund ID", min_value=1, step=1)
-            
-            with col2:
-                cliente = st.text_input("Cliente")
-            
-            with col3:
-                servico = st.selectbox(
-                    "Serviço",
-                    ["Administração", "Gestão", "Custódia", "Agente Monitoramento", "Performance"]
-                )
-            
-            fee_min = st.number_input("Fee Mínimo (R$)", min_value=0.0, step=100.0, format="%.2f")
-            
-            submitted = st.form_submit_button("➕ Criar Taxa Mínima", use_container_width=True, type="primary")
-            
-            if submitted:
-                # Criar DUAS linhas: faixa 0 e faixa máxima (1000000000000000)
-                taxa_faixa_0 = {
-                    "empresa": "a",
-                    "fund_id": fund_id,
-                    "cliente": cliente,
-                    "servico": servico,
-                    "faixa": 0.0,
-                    "fee_min": fee_min
-                }
-                
-                taxa_faixa_max = {
-                    "empresa": "a",
-                    "fund_id": fund_id,
-                    "cliente": cliente,
-                    "servico": servico,
-                    "faixa": 1000000000000000.0,
-                    "fee_min": fee_min
-                }
-                
-                # Salvar no BigQuery (com usuário logado)
-                usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
-                if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_0, usuario_atual):
-                    if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_max, usuario_atual):
-                        st.success(f"✅ Taxa mínima criada! Cliente: {cliente} - {servico} - 2 linhas adicionadas (faixa 0 e máxima)")
-                        st.info("⏳ Aguardando aprovação de um aprovador")
-                        st.rerun()
-                    else:
-                        st.error("❌ Erro ao salvar segunda linha")
+            with st.spinner("Carregando..."):
+                df = carregar_dados_bigquery(tabela)
+                if df is not None and not df.empty:
+                    st.session_state.dados_originais = df.copy()
+                    st.session_state.dados_editados = df.copy()
+                    st.session_state.tabela_selecionada = tabela
+                    st.success(f"✅ {len(df)} registros carregados!")
+                    
+
+                elif df is not None:
+                    st.warning("⚠️ Tabela vazia")
                 else:
-                    st.error("❌ Erro ao salvar primeira linha")
-    
-    
-    # FORMULÁRIO 2: Taxa Mínima + Editar
-    elif st.session_state.tabela_selecionada == "fee_minimo" and acao == "Editar Taxa Existente":
-        st.subheader("✏️ Editar Taxa Mínima Existente")
+                    st.error("❌ Erro ao carregar")
+
+    st.markdown("---")
+
+    # =======================
+    # SEÇÃO 2: ESCOLHA DA AÇÃO E FORMULÁRIOS
+    # =======================
+
+    if st.session_state.dados_editados is not None:
+        # VALIDAÇÃO CRÍTICA: Verificar se a tabela selecionada corresponde aos dados carregados
+        if st.session_state.tabela_selecionada != tabela:
+            st.error("❌ **ATENÇÃO: Incompatibilidade detectada!**")
+            st.warning(f"⚠️ Você selecionou **'{tabela_display}'** mas os dados carregados são de **'{[k for k, v in opcoes_tabela.items() if v == st.session_state.tabela_selecionada][0]}'**")
+            st.info("👉 **SOLUÇÃO:** Clique no botão '📊 Carregar Dados' acima para carregar os dados corretos.")
+            
+            # Botão para forçar recarga
+            if st.button("🔄 Recarregar Dados Corretos", type="primary"):
+                carregar_dados_bigquery.clear()
+                df = carregar_dados_bigquery(tabela)
+                if df is not None and not df.empty:
+                    st.session_state.dados_originais = df.copy()
+                    st.session_state.dados_editados = df.copy()
+                    st.session_state.tabela_selecionada = tabela
+                    st.success(f"✅ {len(df)} registros de {tabela_display} carregados!")
+                    st.rerun()
+            st.stop()  # NÃO MOSTRAR MAIS NADA ATÉ CORRIGIR
         
-        with st.form("form_editar_taxa_minima"):
-            st.markdown("### 📝 Selecione o fundo e serviço para editar o fee mínimo")
+        st.subheader("🔧 Escolha a Ação")
+        
+        acao = st.radio(
+            "O que deseja fazer?",
+            ["Criar Nova Taxa", "Editar Taxa Existente"],
+            key="radio_acao",
+            horizontal=True
+        )
+        
+        st.markdown("---")
+    
+        # =======================
+        # SEÇÃO 3: FORMULÁRIOS ESPECÍFICOS (4 DIFERENTES)
+        # =======================
+        
+        # FORMULÁRIO 1: Taxa Mínima + Criar
+        if st.session_state.tabela_selecionada == "fee_minimo" and acao == "Criar Nova Taxa":
+            st.subheader("➕ Criar Nova Taxa Mínima")
             
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                # Listar todos os clientes disponíveis
-                df = st.session_state.dados_editados
-                clientes_disponiveis = sorted(df['cliente'].unique())
-                cliente_edit = st.selectbox(
-                    "Selecione o Cliente",
-                    options=clientes_disponiveis
-                )
-            
-            with col2:
-                servico_edit = st.selectbox(
-                    "Selecione o Serviço",
-                    ["Administração", "Gestão", "Custódia", "Agente Monitoramento", "Performance"]
-                )
-            
-            with col3:
-                novo_fee_min = st.number_input("Novo Fee Mínimo (R$)", min_value=0.0, step=100.0, format="%.2f")
-            
-            submitted_edit = st.form_submit_button("💾 Salvar Novo Valor", use_container_width=True, type="primary")
-            
-            if submitted_edit:
-                # Buscar o registro pelo cliente e serviço
-                df = st.session_state.dados_editados
-                registro = df[(df['cliente'] == cliente_edit) & (df['servico'] == servico_edit)]
+            with st.form("form_criar_taxa_minima"):
+                st.markdown("### 📝 Preencha os dados da nova taxa")
+                st.info("ℹ️ A taxa mínima será aplicada independente do PL. Serão criadas automaticamente 2 linhas (faixa 0 e faixa máxima).")
                 
-                if not registro.empty:
-                    reg_data = registro.iloc[0]
-                    
-                    taxa_editada = {
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    fund_id = st.number_input("Fund ID", min_value=1, step=1)
+                
+                with col2:
+                    cliente = st.text_input("Cliente")
+                
+                with col3:
+                    servico = st.selectbox(
+                        "Serviço",
+                        ["Administração", "Gestão", "Custódia", "Agente Monitoramento", "Performance"]
+                    )
+                
+                fee_min = st.number_input("Fee Mínimo (R$)", min_value=0.0, step=100.0, format="%.2f")
+                
+                submitted = st.form_submit_button("➕ Criar Taxa Mínima", use_container_width=True, type="primary")
+                
+                if submitted:
+                    # Criar DUAS linhas: faixa 0 e faixa máxima (1000000000000000)
+                    taxa_faixa_0 = {
                         "empresa": "a",
-                        "fund_id": int(reg_data['fund_id']),  # Mantém o valor original
-                        "cliente": reg_data['cliente'],  # Mantém o valor original
-                        "servico": servico_edit,
-                        "faixa": float(reg_data['faixa']),  # Mantém o valor original
-                        "fee_min": novo_fee_min,  # Apenas este valor é editado
-                        "original_lower": float(reg_data['faixa'])  # Chave para UPDATE
+                        "fund_id": fund_id,
+                        "cliente": cliente,
+                        "servico": servico,
+                        "faixa": 0.0,
+                        "fee_min": fee_min
                     }
-                    
+                
+                    taxa_faixa_max = {
+                        "empresa": "a",
+                        "fund_id": fund_id,
+                        "cliente": cliente,
+                        "servico": servico,
+                        "faixa": 1000000000000000.0,
+                        "fee_min": fee_min
+                    }
+                
                     # Salvar no BigQuery (com usuário logado)
                     usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
-                    if salvar_alteracao_pendente("UPDATE", "fee_minimo", taxa_editada, usuario_atual):
-                        st.success(f"✅ Fee mínimo atualizado! Cliente: {cliente_edit} - {servico_edit} - Novo valor: R$ {novo_fee_min:,.2f}")
-                        st.info("⏳ Aguardando aprovação de um aprovador")
-                        st.rerun()
+                    if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_0, usuario_atual):
+                        if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_max, usuario_atual):
+                            st.success(f"✅ Taxa mínima criada! Cliente: {cliente} - {servico} - 2 linhas adicionadas (faixa 0 e máxima)")
+                            st.info("⏳ Aguardando aprovação de um aprovador")
+                            st.rerun()
+                        else:
+                            st.error("❌ Erro ao salvar segunda linha")
                     else:
-                        st.error("❌ Erro ao salvar alteração")
-                else:
-                    st.error(f"❌ Registro não encontrado para Cliente {cliente_edit} e Serviço {servico_edit}")
-
-    # FORMULÁRIO 3: Taxa Variável + Criar
-    elif st.session_state.tabela_selecionada == "fee_variavel" and acao == "Criar Nova Taxa":
-        st.subheader("➕ Criar Nova Taxa Variável")
-        
-        # Inicializar estado para múltiplas faixas
-        if 'faixas_variavel' not in st.session_state:
-            st.session_state.faixas_variavel = []
-        
-        with st.form("form_criar_taxa_variavel"):
-            st.markdown("### 📝 Informações básicas")
-            
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                fund_id_var = st.number_input("Fund ID", min_value=1, step=1, key="var_fund_id")
-            
-            with col2:
-                cliente_var = st.text_input("Cliente", key="var_cliente")
-            
-            with col3:
-                servico_var = st.selectbox(
-                    "Serviço",
-                    ["Administração", "Gestão", "Performance", "Custódia"],
-                    key="var_service"
-                )
-            
-            st.markdown("---")
-            st.markdown("### 📊 Faixas de PL e Taxas")
-            st.info("ℹ️ Será criada 1 linha no BigQuery para cada faixa. Ex: 3 faixas = 3 linhas no banco de dados")
-            
-            # Número de faixas
-            num_faixas = st.number_input("Quantas faixas deseja criar?", min_value=1, max_value=10, value=2, step=1)
-            
-            faixas_data = []
-            
-            for i in range(num_faixas):
-                st.markdown(f"**Faixa {i+1}:**")
-                col_a, col_b = st.columns(2)
-                
-                with col_a:
-                    faixa_pl = st.number_input(
-                        f"PL Mínimo (R$)", 
-                        min_value=0.0, 
-                        step=1000000.0, 
-                        format="%.0f",
-                        key=f"faixa_{i}"
-                    )
-                
-                with col_b:
-                    fee_pct = st.number_input(
-                        f"Taxa Variável (%)", 
-                        min_value=0.0, 
-                        max_value=100.0, 
-                        step=0.0001, 
-                        format="%.4f",
-                        key=f"fee_var_{i}"
-                    )
-                
-                faixas_data.append({
-                    "faixa": faixa_pl,
-                    "fee_variavel": fee_pct
-                })
-            
-            submitted_var = st.form_submit_button("➕ Criar Taxas Variáveis", use_container_width=True, type="primary")
-            
-            if submitted_var:
-                # Criar uma linha para cada faixa
-                usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
-                sucesso = True
-                
-                for faixa in faixas_data:
-                    nova_taxa = {
-                        "empresa": "a",
-                        "fund_id": fund_id_var,
-                        "cliente": cliente_var,
-                        "servico": servico_var,
-                        "faixa": faixa["faixa"],
-                        "fee_variavel": faixa["fee_variavel"]
-                    }
-                    
-                    if not salvar_alteracao_pendente("INSERT", "fee_variavel", nova_taxa, usuario_atual):
-                        sucesso = False
-                        break
-                
-                if sucesso:
-                    st.success(f"✅ {len(faixas_data)} faixa(s) de taxa variável criada(s)! Cliente: {cliente_var} - {servico_var}")
-                    st.info("⏳ Aguardando aprovação de um aprovador")
-                    st.rerun()
-                else:
-                    st.error("❌ Erro ao salvar uma ou mais linhas")
+                        st.error("❌ Erro ao salvar primeira linha")
     
-    # FORMULÁRIO 4: Taxa Variável + Editar
-    elif st.session_state.tabela_selecionada == "fee_variavel" and acao == "Editar Taxa Existente":
-        st.subheader("✏️ Editar Taxa Variável Existente")
+    
+        # FORMULÁRIO 2: Taxa Mínima + Editar
+        elif st.session_state.tabela_selecionada == "fee_minimo" and acao == "Editar Taxa Existente":
+            st.subheader("✏️ Editar Taxa Mínima Existente")
         
-        with st.form("form_editar_taxa_variavel"):
-            st.markdown("### 📝 Selecione o cliente e serviço para editar todas as faixas")
+            with st.form("form_editar_taxa_minima"):
+                st.markdown("### 📝 Selecione o fundo e serviço para editar o fee mínimo")
             
-            col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns(3)
             
-            with col1:
-                # Listar todos os clientes disponíveis
-                df = st.session_state.dados_editados
-                clientes_disponiveis_var = sorted(df['cliente'].unique())
-                cliente_edit_var = st.selectbox(
-                    "Selecione o Cliente",
-                    options=clientes_disponiveis_var,
-                    key="edit_var_cliente"
-                )
+                with col1:
+                    # Listar todos os clientes disponíveis
+                    df = st.session_state.dados_editados
+                    clientes_disponiveis = sorted(df['cliente'].unique())
+                    cliente_edit = st.selectbox(
+                        "Selecione o Cliente",
+                        options=clientes_disponiveis
+                    )
             
-            with col2:
-                servico_edit_var = st.selectbox(
-                    "Selecione o Serviço",
-                    ["Administração", "Gestão", "Performance", "Custódia"],
-                    key="edit_var_service"
-                )
+                with col2:
+                    servico_edit = st.selectbox(
+                        "Selecione o Serviço",
+                        ["Administração", "Gestão", "Custódia", "Agente Monitoramento", "Performance"]
+                    )
             
-            submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
+                with col3:
+                    novo_fee_min = st.number_input("Novo Fee Mínimo (R$)", min_value=0.0, step=100.0, format="%.2f")
             
-            if submitted_buscar:
-                df = st.session_state.dados_editados
+                submitted_edit = st.form_submit_button("💾 Salvar Novo Valor", use_container_width=True, type="primary")
+            
+                if submitted_edit:
+                    # Buscar o registro pelo cliente e serviço
+                    df = st.session_state.dados_editados
+                    registro = df[(df['cliente'] == cliente_edit) & (df['servico'] == servico_edit)]
                 
-                # Buscar todas as faixas deste cliente+serviço
-                registros = df[(df['cliente'] == cliente_edit_var) & (df['servico'] == servico_edit_var)]
-                
-                if not registros.empty:
-                    # Ordenar por faixa
-                    registros = registros.sort_values('faixa')
-                    st.session_state.faixas_var_para_editar = registros.to_dict('records')
-                    st.success(f"✅ {len(registros)} faixas encontradas! Atualize os valores abaixo.")
-                    st.rerun()
-                else:
-                    st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {servico_edit_var}")
+                    if not registro.empty:
+                        reg_data = registro.iloc[0]
+                    
+                        taxa_editada = {
+                            "empresa": "a",
+                            "fund_id": int(reg_data['fund_id']),  # Mantém o valor original
+                            "cliente": reg_data['cliente'],  # Mantém o valor original
+                            "servico": servico_edit,
+                            "faixa": float(reg_data['faixa']),  # Mantém o valor original
+                            "fee_min": novo_fee_min,  # Apenas este valor é editado
+                            "original_lower": float(reg_data['faixa'])  # Chave para UPDATE
+                        }
+                    
+                        # Salvar no BigQuery (com usuário logado)
+                        usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                        if salvar_alteracao_pendente("UPDATE", "fee_minimo", taxa_editada, usuario_atual):
+                            st.success(f"✅ Fee mínimo atualizado! Cliente: {cliente_edit} - {servico_edit} - Novo valor: R$ {novo_fee_min:,.2f}")
+                            st.info("⏳ Aguardando aprovação de um aprovador")
+                            st.rerun()
+                        else:
+                            st.error("❌ Erro ao salvar alteração")
+                    else:
+                        st.error(f"❌ Registro não encontrado para Cliente {cliente_edit} e Serviço {servico_edit}")
+
+        # FORMULÁRIO 3: Taxa Variável + Criar
+        elif st.session_state.tabela_selecionada == "fee_variavel" and acao == "Criar Nova Taxa":
+            st.subheader("➕ Criar Nova Taxa Variável")
         
-        # Se há faixas carregadas, mostrar formulário de edição
-        if 'faixas_var_para_editar' in st.session_state and st.session_state.faixas_var_para_editar:
-            st.markdown("---")
+            # Inicializar estado para múltiplas faixas
+            if 'faixas_variavel' not in st.session_state:
+                st.session_state.faixas_variavel = []
+        
+            with st.form("form_criar_taxa_variavel"):
+                st.markdown("### 📝 Informações básicas")
             
-            with st.form("form_atualizar_faixas_variavel"):
-                st.markdown("### 📊 Edite as faixas abaixo")
-                st.info(f"ℹ️ Total de {len(st.session_state.faixas_var_para_editar)} linha(s) para editar")
-                
-                faixas_editadas = []
-                
-                for idx, faixa in enumerate(st.session_state.faixas_var_para_editar):
-                    st.markdown(f"**Linha {idx + 1}:**")
-                    col_a, col_b = st.columns(2)
-                    
-                    with col_a:
-                        faixa_edit = st.number_input(
-                            f"Faixa (PL Mínimo R$)",
-                            value=float(faixa['faixa']),
-                            min_value=0.0,
-                            step=1000000.0,
-                            format="%.0f",
-                            key=f"edit_faixa_{idx}"
-                        )
-                    
-                    with col_b:
-                        fee_edit = st.number_input(
-                            f"Taxa Variável (%)",
-                            value=float(faixa['fee_variavel']),
-                            min_value=0.0,
-                            max_value=100.0,
-                            step=0.0001,
-                            format="%.4f",
-                            key=f"edit_fee_var_{idx}"
-                        )
-                    
-                    faixas_editadas.append({
-                        "empresa": faixa['empresa'],
-                        "fund_id": int(faixa['fund_id']),
-                        "cliente": faixa['cliente'],
-                        "servico": faixa['servico'],
-                        "faixa": faixa_edit,
-                        "fee_variavel": fee_edit,
-                        "original_faixa": float(faixa['faixa'])  # Para identificar qual linha atualizar
-                    })
-                
+                col1, col2, col3 = st.columns(3)
+            
+                with col1:
+                    fund_id_var = st.number_input("Fund ID", min_value=1, step=1, key="var_fund_id")
+            
+                with col2:
+                    cliente_var = st.text_input("Cliente", key="var_cliente")
+            
+                with col3:
+                    servico_var = st.selectbox(
+                        "Serviço",
+                        ["Administração", "Gestão", "Performance", "Custódia"],
+                        key="var_service"
+                    )
+            
                 st.markdown("---")
+                st.markdown("### 📊 Faixas de PL e Taxas")
+                st.info("ℹ️ Será criada 1 linha no BigQuery para cada faixa. Ex: 3 faixas = 3 linhas no banco de dados")
+            
+                # Número de faixas
+                num_faixas = st.number_input("Quantas faixas deseja criar?", min_value=1, max_value=10, value=2, step=1)
+            
+                faixas_data = []
+            
+                for i in range(num_faixas):
+                    st.markdown(f"**Faixa {i+1}:**")
+                    col_a, col_b = st.columns(2)
                 
-                col_btn1, col_btn2 = st.columns(2)
+                    with col_a:
+                        faixa_pl = st.number_input(
+                            f"PL Mínimo (R$)", 
+                            min_value=0.0, 
+                            step=1000000.0, 
+                            format="%.0f",
+                            key=f"faixa_{i}"
+                        )
                 
-                with col_btn1:
-                    submitted_update = st.form_submit_button("💾 Salvar Todas as Alterações", use_container_width=True, type="primary")
+                    with col_b:
+                        fee_pct = st.number_input(
+                            f"Taxa Variável (%)", 
+                            min_value=0.0, 
+                            max_value=100.0, 
+                            step=0.0001, 
+                            format="%.4f",
+                            key=f"fee_var_{i}"
+                        )
                 
-                with col_btn2:
-                    cancelar_update = st.form_submit_button("❌ Cancelar", use_container_width=True)
-                
-                if submitted_update:
-                    # Salvar todas as faixas editadas no BigQuery
-                    sucesso = True
+                    faixas_data.append({
+                        "faixa": faixa_pl,
+                        "fee_variavel": fee_pct
+                    })
+            
+                submitted_var = st.form_submit_button("➕ Criar Taxas Variáveis", use_container_width=True, type="primary")
+            
+                if submitted_var:
+                    # Criar uma linha para cada faixa
                     usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                    sucesso = True
+                
+                    for faixa in faixas_data:
+                        nova_taxa = {
+                            "empresa": "a",
+                            "fund_id": fund_id_var,
+                            "cliente": cliente_var,
+                            "servico": servico_var,
+                            "faixa": faixa["faixa"],
+                            "fee_variavel": faixa["fee_variavel"]
+                        }
                     
-                    for faixa_edit in faixas_editadas:
-                        if not salvar_alteracao_pendente("UPDATE", "fee_variavel", faixa_edit, usuario_atual):
+                        if not salvar_alteracao_pendente("INSERT", "fee_variavel", nova_taxa, usuario_atual):
                             sucesso = False
                             break
-                    
+                
                     if sucesso:
-                        st.success(f"✅ {len(faixas_editadas)} faixa(s) atualizada(s)! Cliente: {faixas_editadas[0]['cliente']}")
+                        st.success(f"✅ {len(faixas_data)} faixa(s) de taxa variável criada(s)! Cliente: {cliente_var} - {servico_var}")
                         st.info("⏳ Aguardando aprovação de um aprovador")
-                        del st.session_state.faixas_var_para_editar
                         st.rerun()
                     else:
-                        st.error("❌ Erro ao salvar uma ou mais alterações")
+                        st.error("❌ Erro ao salvar uma ou mais linhas")
+    
+        # FORMULÁRIO 4: Taxa Variável + Editar
+        elif st.session_state.tabela_selecionada == "fee_variavel" and acao == "Editar Taxa Existente":
+            st.subheader("✏️ Editar Taxa Variável Existente")
+        
+            with st.form("form_editar_taxa_variavel"):
+                st.markdown("### 📝 Selecione o cliente e serviço para editar todas as faixas")
+            
+                col1, col2 = st.columns(2)
+            
+                with col1:
+                    # Listar todos os clientes disponíveis
+                    df = st.session_state.dados_editados
+                    clientes_disponiveis_var = sorted(df['cliente'].unique())
+                    cliente_edit_var = st.selectbox(
+                        "Selecione o Cliente",
+                        options=clientes_disponiveis_var,
+                        key="edit_var_cliente"
+                    )
+            
+                with col2:
+                    servico_edit_var = st.selectbox(
+                        "Selecione o Serviço",
+                        ["Administração", "Gestão", "Performance", "Custódia"],
+                        key="edit_var_service"
+                    )
+            
+                submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
+            
+                if submitted_buscar:
+                    df = st.session_state.dados_editados
                 
-                if cancelar_update:
-                    del st.session_state.faixas_var_para_editar
-                    st.rerun()
+                    # Buscar todas as faixas deste cliente+serviço
+                    registros = df[(df['cliente'] == cliente_edit_var) & (df['servico'] == servico_edit_var)]
+                
+                    if not registros.empty:
+                        # Ordenar por faixa
+                        registros = registros.sort_values('faixa')
+                        st.session_state.faixas_var_para_editar = registros.to_dict('records')
+                        st.success(f"✅ {len(registros)} faixas encontradas! Atualize os valores abaixo.")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Nenhuma faixa encontrada para {cliente_edit_var} - {servico_edit_var}")
+        
+            # Se há faixas carregadas, mostrar formulário de edição
+            if 'faixas_var_para_editar' in st.session_state and st.session_state.faixas_var_para_editar:
+                st.markdown("---")
+            
+                with st.form("form_atualizar_faixas_variavel"):
+                    st.markdown("### 📊 Edite as faixas abaixo")
+                    st.info(f"ℹ️ Total de {len(st.session_state.faixas_var_para_editar)} linha(s) para editar")
+                
+                    faixas_editadas = []
+                
+                    for idx, faixa in enumerate(st.session_state.faixas_var_para_editar):
+                        st.markdown(f"**Linha {idx + 1}:**")
+                        col_a, col_b = st.columns(2)
+                    
+                        with col_a:
+                            faixa_edit = st.number_input(
+                                f"Faixa (PL Mínimo R$)",
+                                value=float(faixa['faixa']),
+                                min_value=0.0,
+                                step=1000000.0,
+                                format="%.0f",
+                                key=f"edit_faixa_{idx}"
+                            )
+                    
+                        with col_b:
+                            fee_edit = st.number_input(
+                                f"Taxa Variável (%)",
+                                value=float(faixa['fee_variavel']),
+                                min_value=0.0,
+                                max_value=100.0,
+                                step=0.0001,
+                                format="%.4f",
+                                key=f"edit_fee_var_{idx}"
+                            )
+                    
+                        faixas_editadas.append({
+                            "empresa": faixa['empresa'],
+                            "fund_id": int(faixa['fund_id']),
+                            "cliente": faixa['cliente'],
+                            "servico": faixa['servico'],
+                            "faixa": faixa_edit,
+                            "fee_variavel": fee_edit,
+                            "original_faixa": float(faixa['faixa'])  # Para identificar qual linha atualizar
+                        })
+                
+                    st.markdown("---")
+                
+                    col_btn1, col_btn2 = st.columns(2)
+                
+                    with col_btn1:
+                        submitted_update = st.form_submit_button("💾 Salvar Todas as Alterações", use_container_width=True, type="primary")
+                
+                    with col_btn2:
+                        cancelar_update = st.form_submit_button("❌ Cancelar", use_container_width=True)
+                
+                    if submitted_update:
+                        # Salvar todas as faixas editadas no BigQuery
+                        sucesso = True
+                        usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                    
+                        for faixa_edit in faixas_editadas:
+                            if not salvar_alteracao_pendente("UPDATE", "fee_variavel", faixa_edit, usuario_atual):
+                                sucesso = False
+                                break
+                    
+                        if sucesso:
+                            st.success(f"✅ {len(faixas_editadas)} faixa(s) atualizada(s)! Cliente: {faixas_editadas[0]['cliente']}")
+                            st.info("⏳ Aguardando aprovação de um aprovador")
+                            del st.session_state.faixas_var_para_editar
+                            st.rerun()
+                        else:
+                            st.error("❌ Erro ao salvar uma ou mais alterações")
+                
+                    if cancelar_update:
+                        del st.session_state.faixas_var_para_editar
+                        st.rerun()
 
     
-    # =======================
-    # SEÇÃO 4: VISUALIZAÇÃO DA PLANILHA
-    # =======================
+        # =======================
+        # SEÇÃO 4: VISUALIZAÇÃO DA PLANILHA
+        # =======================
     
+        st.markdown("---")
+        st.subheader(f"📊 Dados da {tabela_display}")
+    
+        # Filtros
+        col_filtro1, col_filtro2, col_filtro3 = st.columns([2, 2, 1])
+    
+        with col_filtro1:
+            # Filtro por cliente
+            clientes_unicos = ["Todos"] + sorted(st.session_state.dados_editados['cliente'].unique().tolist())
+            cliente_filtro = st.selectbox("🔍 Filtrar por Cliente", clientes_unicos, key="filtro_cliente")
+    
+        with col_filtro2:
+            # Filtro por serviço
+            if 'servico' in st.session_state.dados_editados.columns:
+                servicos_unicos = ["Todos"] + sorted(st.session_state.dados_editados['servico'].unique().tolist())
+                servico_filtro = st.selectbox("🔍 Filtrar por Serviço", servicos_unicos, key="filtro_servico")
+            else:
+                servico_filtro = "Todos"
+    
+        with col_filtro3:
+            # Botão para limpar filtros
+            if st.button("🔄 Limpar Filtros", use_container_width=True):
+                st.rerun()
+    
+        # Aplicar filtros
+        df_filtrado = st.session_state.dados_editados.copy()
+    
+        if cliente_filtro != "Todos":
+            df_filtrado = df_filtrado[df_filtrado['cliente'] == cliente_filtro]
+    
+        if servico_filtro != "Todos":
+            df_filtrado = df_filtrado[df_filtrado['servico'] == servico_filtro]
+    
+        st.info(f"**{len(df_filtrado)}** de **{len(st.session_state.dados_editados)}** registros exibidos")
+    
+        # Planilha sempre visível com filtros aplicados
+        st.dataframe(
+            df_filtrado,
+            use_container_width=True,
+            height=400
+        )
+
+    # =======================
+
     st.markdown("---")
-    st.subheader(f"📊 Dados da {tabela_display}")
-    
-    # Filtros
-    col_filtro1, col_filtro2, col_filtro3 = st.columns([2, 2, 1])
-    
-    with col_filtro1:
-        # Filtro por cliente
-        clientes_unicos = ["Todos"] + sorted(st.session_state.dados_editados['cliente'].unique().tolist())
-        cliente_filtro = st.selectbox("🔍 Filtrar por Cliente", clientes_unicos, key="filtro_cliente")
-    
-    with col_filtro2:
-        # Filtro por serviço
-        if 'servico' in st.session_state.dados_editados.columns:
-            servicos_unicos = ["Todos"] + sorted(st.session_state.dados_editados['servico'].unique().tolist())
-            servico_filtro = st.selectbox("🔍 Filtrar por Serviço", servicos_unicos, key="filtro_servico")
-        else:
-            servico_filtro = "Todos"
-    
-    with col_filtro3:
-        # Botão para limpar filtros
-        if st.button("🔄 Limpar Filtros", use_container_width=True):
-            st.rerun()
-    
-    # Aplicar filtros
-    df_filtrado = st.session_state.dados_editados.copy()
-    
-    if cliente_filtro != "Todos":
-        df_filtrado = df_filtrado[df_filtrado['cliente'] == cliente_filtro]
-    
-    if servico_filtro != "Todos":
-        df_filtrado = df_filtrado[df_filtrado['servico'] == servico_filtro]
-    
-    st.info(f"**{len(df_filtrado)}** de **{len(st.session_state.dados_editados)}** registros exibidos")
-    
-    # Planilha sempre visível com filtros aplicados
-    st.dataframe(
-        df_filtrado,
-        use_container_width=True,
-        height=400
-    )
 
 # =======================
+# ABA 2: WAIVERS
+# =======================
+
+elif aba_selecionada == "💰 Waivers":
+    
+    st.header("💰 Gestão de Waivers")
+    st.markdown("---")
+    
+    st.info("🚧 **Painel de Waivers em Desenvolvimento**")
+    
+    st.markdown("""
+    ### 📋 Funcionalidades Planejadas:
+    
+    - 📝 **Criar novo waiver** para um ou mais fundos
+    - 📊 **Visualizar histórico** de waivers aplicados
+    - ✏️ **Editar waivers** existentes
+    - 🗑️ **Remover waivers** quando necessário
+    - 📈 **Relatórios** de waivers por período
+    
+    ### 💡 Tipos de Waiver:
+    
+    - **Provisionado**: Distribui o valor proporcionalmente por todos os registros do fundo
+    - **Não Provisionado**: Aplica o valor total no último registro do fundo
+    
+    ---
+    
+    *Este painel será implementado em breve.*
+    """)
+    
+    # Espaço para futuras funcionalidades
+    with st.expander("🔍 Ver Histórico de Waivers (Em Desenvolvimento)"):
+        st.write("Aqui será exibida uma tabela com o histórico completo de waivers aplicados.")
+
+# =======================
+# ABA 3: DESCONTOS
+# =======================
+
+elif aba_selecionada == "🎯 Descontos":
+    
+    st.header("🎯 Gestão de Descontos")
+    st.markdown("---")
+    
+    st.info("🚧 **Painel de Descontos em Desenvolvimento**")
+    
+    st.markdown("""
+    ### 📋 Funcionalidades Planejadas:
+    
+    - 📝 **Criar novos descontos** para fundos específicos
+    - 📊 **Visualizar descontos** ativos e históricos
+    - ✏️ **Editar descontos** existentes
+    - 🗑️ **Remover descontos** quando necessário
+    - 📈 **Relatórios** de descontos por período e fundo
+    - 🔔 **Alertas** de descontos próximos do vencimento
+    
+    ### 💡 Tipos de Desconto:
+    
+    - **Desconto Percentual**: Redução de X% sobre a taxa calculada
+    - **Desconto Fixo**: Redução de valor fixo em R$
+    - **Desconto Temporário**: Válido por período específico
+    - **Desconto Permanente**: Aplicado indefinidamente
+    
+    ---
+    
+    *Este painel será implementado em breve.*
+    """)
+    
+    # Espaço para futuras funcionalidades
+    with st.expander("🔍 Ver Descontos Ativos (Em Desenvolvimento)"):
+        st.write("Aqui será exibida uma tabela com todos os descontos atualmente ativos.")
 
 st.markdown("---")
+
+# =======================
+# PAINEL DE APROVAÇÃO - COMUM A TODAS AS ABAS
+# =======================
 
 # PAINEL DE APROVAÇÃO (apenas para aprovadores)
 if perfil == "aprovador":
