@@ -1252,9 +1252,9 @@ elif aba_selecionada == "💰 Waivers":
             return []
     
     # Seção: Criar Novo Waiver
-    st.subheader("➕ Criar Novo Waiver em Ondas")
+    st.subheader("➕ Criar Novo Waiver Progressivo")
     
-    st.info("💡 **Waivers em Ondas**: Configure múltiplas fases com percentuais diferentes. Ex: Meses 1-2 = 100% waiver (não cobra), Mês 3-4 = 50% waiver (cobra metade), Mês 5+ = 0% (cobra full)")
+    st.info("💡 **Waivers Progressivos**: Configure múltiplas fases com percentuais diferentes. Ex: Meses 1-2 = 100% waiver (não cobra), Mês 3-4 = 50% waiver (cobra metade), Mês 5+ = 0% (cobra full)")
     
     # Carregar fundos FORA do formulário
     fundos_disponiveis = carregar_fundos_disponiveis()
@@ -1289,39 +1289,39 @@ elif aba_selecionada == "💰 Waivers":
     if not fundos_selecionados:
         st.info("👆 Selecione pelo menos um fundo para configurar o waiver")
     else:
-        # Inicializar número de ondas no session_state
-        if 'num_ondas_waiver' not in st.session_state:
-            st.session_state.num_ondas_waiver = 1
+        # Inicializar número de fases no session_state
+        if 'num_fases_waiver' not in st.session_state:
+            st.session_state.num_fases_waiver = 1
         
-        # Controles para adicionar/remover ondas FORA do formulário
-        col_onda1, col_onda2, col_onda3 = st.columns([2, 2, 4])
+        # Controles para adicionar/remover fases FORA do formulário
+        col_fase1, col_fase2, col_fase3 = st.columns([2, 2, 4])
         
-        with col_onda1:
-            if st.button("➕ Adicionar Onda", use_container_width=True):
-                st.session_state.num_ondas_waiver += 1
+        with col_fase1:
+            if st.button("➕ Adicionar Fase", use_container_width=True):
+                st.session_state.num_fases_waiver += 1
                 st.rerun()
         
-        with col_onda2:
-            if st.button("➖ Remover Onda", use_container_width=True, disabled=st.session_state.num_ondas_waiver <= 1):
-                if st.session_state.num_ondas_waiver > 1:
-                    st.session_state.num_ondas_waiver -= 1
+        with col_fase2:
+            if st.button("➖ Remover Fase", use_container_width=True, disabled=st.session_state.num_fases_waiver <= 1):
+                if st.session_state.num_fases_waiver > 1:
+                    st.session_state.num_fases_waiver -= 1
                     st.rerun()
         
-        with col_onda3:
-            st.info(f"🌊 **{st.session_state.num_ondas_waiver} onda(s)** configurada(s)")
+        with col_fase3:
+            st.info(f"📊 **{st.session_state.num_fases_waiver} fase(s)** configurada(s)")
         
         # Mostrar formulário
         with st.form("form_criar_waiver"):
-            st.markdown("### 📝 Configure as ondas de waiver")
-            st.info(f"✅ {len(fundos_selecionados)} fundo(s) × {st.session_state.num_ondas_waiver} onda(s) = **{len(fundos_selecionados) * st.session_state.num_ondas_waiver * (len(servicos_selecionados) if servicos_selecionados else 1)} waiver(s)** serão criados")
+            st.markdown("### 📝 Configure as fases do waiver")
+            st.info(f"✅ {len(fundos_selecionados)} fundo(s) × {st.session_state.num_fases_waiver} fase(s) = **{len(fundos_selecionados) * st.session_state.num_fases_waiver * (len(servicos_selecionados) if servicos_selecionados else 1)} waiver(s)** serão criados")
             
             st.markdown("---")
             
-            # Configurar cada onda
-            ondas_config = []
+            # Configurar cada fase
+            fases_config = []
             
-            for onda_idx in range(st.session_state.num_ondas_waiver):
-                st.markdown(f"### 🌊 Onda {onda_idx + 1}")
+            for fase_idx in range(st.session_state.num_fases_waiver):
+                st.markdown(f"### 📋 Fase {fase_idx + 1}")
                 
                 col_periodo1, col_periodo2 = st.columns(2)
                 
@@ -1362,7 +1362,7 @@ elif aba_selecionada == "💰 Waivers":
                             help="Ex: 100% = não cobra nada, 50% = cobra metade, 0% = cobra full"
                         )
                         valor_fixo_waiver = None
-                        tipo_desconto_onda = "Percentual"
+                        tipo_desconto_fase = "Percentual"
                     else:
                         valor_fixo_waiver = st.number_input(
                             f"💵 Valor Fixo (R$):",
@@ -1370,11 +1370,11 @@ elif aba_selecionada == "💰 Waivers":
                             value=0.0,
                             step=100.0,
                             format="%.2f",
-                            key=f"valor_fixo_onda_{onda_idx}",
+                            key=f"valor_fixo_fase_{fase_idx}",
                             help="Valor em reais que será descontado"
                         )
                         percentual_waiver = None
-                        tipo_desconto_onda = "Fixo"
+                        tipo_desconto_fase = "Fixo"
                 
                 with col_tipo2:
                     forma_aplicacao = st.selectbox(
@@ -1394,10 +1394,10 @@ elif aba_selecionada == "💰 Waivers":
                     else:
                         st.metric("💰 Valor", f"R$ {valor_fixo_waiver:,.2f}")
                 
-                ondas_config.append({
-                    "data_inicio": data_inicio_onda,
-                    "data_fim": data_fim_onda,
-                    "tipo_desconto": tipo_desconto_onda,
+                fases_config.append({
+                    "data_inicio": data_inicio_fase,
+                    "data_fim": data_fim_fase,
+                    "tipo_desconto": tipo_desconto_fase,
                     "percentual_waiver": percentual_waiver,
                     "valor_fixo_waiver": valor_fixo_waiver,
                     "forma_aplicacao": forma_aplicacao
@@ -1409,38 +1409,38 @@ elif aba_selecionada == "💰 Waivers":
             observacao_waiver = st.text_area(
                 "📝 Observação (opcional):",
                 placeholder="Ex: Waiver progressivo - redução gradual em 3 fases...",
-                key="obs_waiver_ondas"
+                key="obs_waiver_fases"
             )
             
-            submitted_waiver = st.form_submit_button("➕ Criar Waivers em Ondas", use_container_width=True, type="primary")
+            submitted_waiver = st.form_submit_button("➕ Criar Waivers Progressivos", use_container_width=True, type="primary")
             
             if submitted_waiver:
                 # Validações
                 erros = []
                 
-                for idx, onda in enumerate(ondas_config, 1):
-                    if onda['tipo_desconto'] == "Percentual" and (onda['percentual_waiver'] is None or onda['percentual_waiver'] < 0):
-                        erros.append(f"❌ Onda {idx}: Percentual inválido")
+                for idx, fase in enumerate(fases_config, 1):
+                    if fase['tipo_desconto'] == "Percentual" and (fase['percentual_waiver'] is None or fase['percentual_waiver'] < 0):
+                        erros.append(f"❌ Fase {idx}: Percentual inválido")
                     
-                    if onda['tipo_desconto'] == "Fixo" and (onda['valor_fixo_waiver'] is None or onda['valor_fixo_waiver'] <= 0):
-                        erros.append(f"❌ Onda {idx}: Valor fixo deve ser maior que zero")
+                    if fase['tipo_desconto'] == "Fixo" and (fase['valor_fixo_waiver'] is None or fase['valor_fixo_waiver'] <= 0):
+                        erros.append(f"❌ Fase {idx}: Valor fixo deve ser maior que zero")
                     
-                    if onda['data_fim'] < onda['data_inicio']:
-                        erros.append(f"❌ Onda {idx}: Data fim anterior à data início")
+                    if fase['data_fim'] < fase['data_inicio']:
+                        erros.append(f"❌ Fase {idx}: Data fim anterior à data início")
                 
                 # Verificar sobreposição de períodos
-                for i, onda1 in enumerate(ondas_config):
-                    for j, onda2 in enumerate(ondas_config):
+                for i, fase1 in enumerate(fases_config):
+                    for j, fase2 in enumerate(fases_config):
                         if i < j:
                             # Verifica se há sobreposição
-                            if not (onda1['data_fim'] < onda2['data_inicio'] or onda2['data_fim'] < onda1['data_inicio']):
-                                erros.append(f"⚠️ Atenção: Onda {i+1} e Onda {j+1} têm períodos sobrepostos")
+                            if not (fase1['data_fim'] < fase2['data_inicio'] or fase2['data_fim'] < fase1['data_inicio']):
+                                erros.append(f"⚠️ Atenção: Fase {i+1} e Fase {j+1} têm períodos sobrepostos")
                 
                 if erros:
                     for erro in erros:
                         st.warning(erro) if "Atenção" in erro else st.error(erro)
                 else:
-                    # Criar waivers para cada combinação: fundo × onda × serviço
+                    # Criar waivers para cada combinação: fundo × fase × serviço
                     usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
                     solicitacao_id = str(uuid.uuid4())  # Mesmo ID para agrupar todos
                     sucesso = True
@@ -1450,25 +1450,25 @@ elif aba_selecionada == "💰 Waivers":
                     
                     for fundo in fundos_selecionados:
                         for servico in servicos_para_criar:
-                            for idx, onda in enumerate(ondas_config, 1):
+                            for idx, fase in enumerate(fases_config, 1):
                                 # Calcular valor_desconto baseado no tipo
-                                if onda['tipo_desconto'] == "Percentual":
+                                if fase['tipo_desconto'] == "Percentual":
                                     valor_desconto = 0.0  # Será calculado na aplicação
-                                    percentual_desconto = onda['percentual_waiver']
+                                    percentual_desconto = fase['percentual_waiver']
                                 else:
-                                    valor_desconto = onda['valor_fixo_waiver']
+                                    valor_desconto = fase['valor_fixo_waiver']
                                     percentual_desconto = None
                                 
                                 dados_waiver = {
                                     "fund_name": fundo,
                                     "valor_waiver": valor_desconto,
-                                    "tipo_waiver": onda['forma_aplicacao'],
-                                    "data_inicio": onda['data_inicio'].strftime('%Y-%m-%d'),
-                                    "data_fim": onda['data_fim'].strftime('%Y-%m-%d'),
+                                    "tipo_waiver": fase['forma_aplicacao'],
+                                    "data_inicio": fase['data_inicio'].strftime('%Y-%m-%d'),
+                                    "data_fim": fase['data_fim'].strftime('%Y-%m-%d'),
                                     "servico": servico,
-                                    "tipo_desconto": onda['tipo_desconto'],
+                                    "tipo_desconto": fase['tipo_desconto'],
                                     "percentual_desconto": percentual_desconto,
-                                    "observacao": f"{observacao_waiver or 'Waiver em ondas'} - Onda {idx}/{len(ondas_config)}"
+                                    "observacao": f"{observacao_waiver or 'Waiver progressivo'} - Fase {idx}/{len(fases_config)}"
                                 }
                                 
                                 resultado, _ = salvar_alteracao_pendente("INSERT", "waiver", dados_waiver, usuario_atual, solicitacao_id)
@@ -1485,10 +1485,10 @@ elif aba_selecionada == "💰 Waivers":
                             break
                     
                     if sucesso:
-                        st.success(f"✅ {total_waivers} waiver(s) criado(s) em {len(ondas_config)} onda(s) e enviados para aprovação!")
+                        st.success(f"✅ {total_waivers} waiver(s) criado(s) em {len(fases_config)} fase(s) e enviados para aprovação!")
                         st.info("⏳ Aguardando aprovação de um aprovador")
-                        # Resetar número de ondas
-                        st.session_state.num_ondas_waiver = 1
+                        # Resetar número de fases
+                        st.session_state.num_fases_waiver = 1
                         st.rerun()
                     else:
                         st.error("❌ Erro ao salvar um ou mais waivers")
