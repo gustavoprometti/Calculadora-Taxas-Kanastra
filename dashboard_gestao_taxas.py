@@ -720,25 +720,23 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                 # Carregar fundos do BigQuery
                 df_fundos = carregar_fundos_completos()
                 
-                col1, col2, col3 = st.columns(3)
+                col1, col2 = st.columns(2)
                 
                 with col1:
-                    # Criar lista de opções com nome do fundo e ID
-                    opcoes_fundos = [f"{row['fund_name']} (ID: {row['fund_id']})" for _, row in df_fundos.iterrows()]
-                    fundo_selecionado = st.selectbox(
-                        "Selecione o Fundo",
-                        options=opcoes_fundos
+                    # Criar lista de opções com nome do cliente (fund_name)
+                    opcoes_clientes = [f"{row['client']} (ID: {row['fund_id']})" for _, row in df_fundos.iterrows()]
+                    cliente_selecionado = st.selectbox(
+                        "Cliente",
+                        options=opcoes_clientes,
+                        help="Selecione o cliente (nome do fundo)"
                     )
                     # Extrair fund_id da seleção
-                    idx_selecionado = opcoes_fundos.index(fundo_selecionado)
+                    idx_selecionado = opcoes_clientes.index(cliente_selecionado)
                     fund_id = int(df_fundos.iloc[idx_selecionado]['fund_id'])
                     cnpj = df_fundos.iloc[idx_selecionado]['cnpj']
-                    cliente = df_fundos.iloc[idx_selecionado]['client']  # Buscar do BigQuery
+                    cliente = df_fundos.iloc[idx_selecionado]['client']
                 
                 with col2:
-                    st.text_input("Cliente", value=cliente, disabled=True, help="Cliente preenchido automaticamente do cadastro do fundo")
-                
-                with col3:
                     servico = st.selectbox(
                         "Serviço",
                         ["Administração", "Gestão", "Custódia", "Agente Monitoramento", "Performance"]
@@ -907,26 +905,24 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                 # Carregar fundos do BigQuery
                 df_fundos_var = carregar_fundos_completos()
             
-                col1, col2, col3 = st.columns(3)
+                col1, col2 = st.columns(2)
             
                 with col1:
-                    # Criar lista de opções com nome do fundo e ID
-                    opcoes_fundos_var = [f"{row['fund_name']} (ID: {row['fund_id']})" for _, row in df_fundos_var.iterrows()]
-                    fundo_selecionado_var = st.selectbox(
-                        "Selecione o Fundo",
-                        options=opcoes_fundos_var,
-                        key="var_fund_select"
+                    # Criar lista de opções com nome do cliente (fund_name)
+                    opcoes_clientes_var = [f"{row['client']} (ID: {row['fund_id']})" for _, row in df_fundos_var.iterrows()]
+                    cliente_selecionado_var = st.selectbox(
+                        "Cliente",
+                        options=opcoes_clientes_var,
+                        key="var_cliente_select",
+                        help="Selecione o cliente (nome do fundo)"
                     )
                     # Extrair fund_id da seleção
-                    idx_selecionado_var = opcoes_fundos_var.index(fundo_selecionado_var)
+                    idx_selecionado_var = opcoes_clientes_var.index(cliente_selecionado_var)
                     fund_id_var = int(df_fundos_var.iloc[idx_selecionado_var]['fund_id'])
                     cnpj_var = df_fundos_var.iloc[idx_selecionado_var]['cnpj']
-                    cliente_var = df_fundos_var.iloc[idx_selecionado_var]['client']  # Buscar do BigQuery
+                    cliente_var = df_fundos_var.iloc[idx_selecionado_var]['client']
             
                 with col2:
-                    st.text_input("Cliente", value=cliente_var, disabled=True, help="Cliente preenchido automaticamente do cadastro do fundo", key="var_cliente")
-            
-                with col3:
                     servico_var = st.selectbox(
                         "Serviço",
                         ["Administração", "Gestão", "Performance", "Custódia"],
