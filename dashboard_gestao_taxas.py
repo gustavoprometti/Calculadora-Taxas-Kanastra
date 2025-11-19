@@ -209,7 +209,7 @@ def carregar_dados_bigquery(tabela):
 
 @st.cache_data(ttl=3600)
 def carregar_fundos_completos():
-    """Carrega lista de fundos com ID, nome e CNPJ para criação de taxas"""
+    """Carrega lista de fundos com ID, nome, CNPJ e cliente para criação de taxas"""
     try:
         client = get_bigquery_client()
         if client is None:
@@ -219,7 +219,8 @@ def carregar_fundos_completos():
         SELECT 
             id as fund_id,
             name as fund_name,
-            government_id as cnpj
+            government_id as cnpj,
+            client
         FROM `kanastra-live.hub.funds` 
         WHERE name IS NOT NULL 
         ORDER BY name
@@ -732,9 +733,10 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                     idx_selecionado = opcoes_fundos.index(fundo_selecionado)
                     fund_id = int(df_fundos.iloc[idx_selecionado]['fund_id'])
                     cnpj = df_fundos.iloc[idx_selecionado]['cnpj']
+                    cliente = df_fundos.iloc[idx_selecionado]['client']  # Buscar do BigQuery
                 
                 with col2:
-                    cliente = st.text_input("Cliente")
+                    st.text_input("Cliente", value=cliente, disabled=True, help="Cliente preenchido automaticamente do cadastro do fundo")
                 
                 with col3:
                     servico = st.selectbox(
@@ -919,9 +921,10 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                     idx_selecionado_var = opcoes_fundos_var.index(fundo_selecionado_var)
                     fund_id_var = int(df_fundos_var.iloc[idx_selecionado_var]['fund_id'])
                     cnpj_var = df_fundos_var.iloc[idx_selecionado_var]['cnpj']
+                    cliente_var = df_fundos_var.iloc[idx_selecionado_var]['client']  # Buscar do BigQuery
             
                 with col2:
-                    cliente_var = st.text_input("Cliente", key="var_cliente")
+                    st.text_input("Cliente", value=cliente_var, disabled=True, help="Cliente preenchido automaticamente do cadastro do fundo", key="var_cliente")
             
                 with col3:
                     servico_var = st.selectbox(
