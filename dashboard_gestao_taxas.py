@@ -619,6 +619,28 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                 
                 fee_min = st.number_input("Fee Mínimo (R$)", min_value=0.0, step=100.0, format="%.2f")
                 
+                st.markdown("---")
+                st.markdown("### 📅 Período de Vigência")
+                
+                col_data1, col_data2 = st.columns(2)
+                with col_data1:
+                    data_inicio = st.date_input(
+                        "Data Início *",
+                        value=datetime.now().date(),
+                        help="Data em que a taxa começa a vigorar"
+                    )
+                
+                with col_data2:
+                    usa_data_fim = st.checkbox("Definir data fim?", value=False, help="Deixe desmarcado para vigência indefinida")
+                    if usa_data_fim:
+                        data_fim = st.date_input(
+                            "Data Fim",
+                            value=datetime.now().date() + pd.DateOffset(years=1),
+                            help="Data em que a taxa deixa de vigorar"
+                        )
+                    else:
+                        data_fim = None
+                
                 submitted = st.form_submit_button("➕ Criar Taxa Mínima", use_container_width=True, type="primary")
                 
                 if submitted:
@@ -629,7 +651,9 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                         "cliente": cliente,
                         "servico": servico,
                         "faixa": 0.0,
-                        "fee_min": fee_min
+                        "fee_min": fee_min,
+                        "data_inicio": data_inicio.strftime('%Y-%m-%d'),
+                        "data_fim": data_fim.strftime('%Y-%m-%d') if data_fim else None
                     }
                 
                     taxa_faixa_max = {
@@ -638,7 +662,9 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                         "cliente": cliente,
                         "servico": servico,
                         "faixa": 1000000000000000.0,
-                        "fee_min": fee_min
+                        "fee_min": fee_min,
+                        "data_inicio": data_inicio.strftime('%Y-%m-%d'),
+                        "data_fim": data_fim.strftime('%Y-%m-%d') if data_fim else None
                     }
                 
                     # Salvar no BigQuery (com usuário logado)
@@ -681,6 +707,30 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
             
                 with col3:
                     novo_fee_min = st.number_input("Novo Fee Mínimo (R$)", min_value=0.0, step=100.0, format="%.2f")
+                
+                st.markdown("---")
+                st.markdown("### 📅 Período de Vigência")
+                
+                col_data1, col_data2 = st.columns(2)
+                with col_data1:
+                    data_inicio_edit = st.date_input(
+                        "Nova Data Início *",
+                        value=datetime.now().date(),
+                        help="Data em que a taxa alterada começa a vigorar",
+                        key="edit_min_data_inicio"
+                    )
+                
+                with col_data2:
+                    usa_data_fim_edit = st.checkbox("Definir data fim?", value=False, help="Deixe desmarcado para vigência indefinida", key="edit_min_usa_fim")
+                    if usa_data_fim_edit:
+                        data_fim_edit = st.date_input(
+                            "Nova Data Fim",
+                            value=datetime.now().date() + pd.DateOffset(years=1),
+                            help="Data em que a taxa deixa de vigorar",
+                            key="edit_min_data_fim"
+                        )
+                    else:
+                        data_fim_edit = None
             
                 submitted_edit = st.form_submit_button("💾 Salvar Novo Valor", use_container_width=True, type="primary")
             
@@ -699,7 +749,9 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                             "servico": servico_edit,
                             "faixa": float(reg_data['faixa']),  # Mantém o valor original
                             "fee_min": novo_fee_min,  # Apenas este valor é editado
-                            "original_lower": float(reg_data['faixa'])  # Chave para UPDATE
+                            "original_lower": float(reg_data['faixa']),  # Chave para UPDATE
+                            "data_inicio": data_inicio_edit.strftime('%Y-%m-%d'),
+                            "data_fim": data_fim_edit.strftime('%Y-%m-%d') if data_fim_edit else None
                         }
                     
                         # Salvar no BigQuery (com usuário logado)
@@ -789,6 +841,30 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                         "faixa": faixa_pl,
                         "fee_variavel": fee_pct
                     })
+                
+                st.markdown("---")
+                st.markdown("### 📅 Período de Vigência")
+                
+                col_data1, col_data2 = st.columns(2)
+                with col_data1:
+                    data_inicio_var = st.date_input(
+                        "Data Início *",
+                        value=datetime.now().date(),
+                        help="Data em que a taxa começa a vigorar",
+                        key="var_data_inicio"
+                    )
+                
+                with col_data2:
+                    usa_data_fim_var = st.checkbox("Definir data fim?", value=False, help="Deixe desmarcado para vigência indefinida", key="var_usa_fim")
+                    if usa_data_fim_var:
+                        data_fim_var = st.date_input(
+                            "Data Fim",
+                            value=datetime.now().date() + pd.DateOffset(years=1),
+                            help="Data em que a taxa deixa de vigorar",
+                            key="var_data_fim"
+                        )
+                    else:
+                        data_fim_var = None
             
                 submitted_var = st.form_submit_button("➕ Criar Taxas Variáveis", use_container_width=True, type="primary")
             
@@ -805,7 +881,9 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                             "cliente": cliente_var,
                             "servico": servico_var,
                             "faixa": faixa["faixa"],
-                            "fee_variavel": faixa["fee_variavel"]
+                            "fee_variavel": faixa["fee_variavel"],
+                            "data_inicio": data_inicio_var.strftime('%Y-%m-%d'),
+                            "data_fim": data_fim_var.strftime('%Y-%m-%d') if data_fim_var else None
                         }
                     
                         resultado, _ = salvar_alteracao_pendente("INSERT", "fee_variavel", nova_taxa, usuario_atual, solicitacao_id)
@@ -909,6 +987,30 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                         })
                 
                     st.markdown("---")
+                    st.markdown("### 📅 Período de Vigência")
+                    
+                    col_data1, col_data2 = st.columns(2)
+                    with col_data1:
+                        data_inicio_edit_var = st.date_input(
+                            "Nova Data Início *",
+                            value=datetime.now().date(),
+                            help="Data em que a taxa alterada começa a vigorar",
+                            key="edit_var_data_inicio"
+                        )
+                    
+                    with col_data2:
+                        usa_data_fim_edit_var = st.checkbox("Definir data fim?", value=False, help="Deixe desmarcado para vigência indefinida", key="edit_var_usa_fim")
+                        if usa_data_fim_edit_var:
+                            data_fim_edit_var = st.date_input(
+                                "Nova Data Fim",
+                                value=datetime.now().date() + pd.DateOffset(years=1),
+                                help="Data em que a taxa deixa de vigorar",
+                                key="edit_var_data_fim"
+                            )
+                        else:
+                            data_fim_edit_var = None
+                
+                    st.markdown("---")
                 
                     col_btn1, col_btn2 = st.columns(2)
                 
@@ -925,6 +1027,10 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                         solicitacao_id = str(uuid.uuid4())  # Mesmo ID para agrupar todas as edições
                     
                         for faixa_edit in faixas_editadas:
+                            # Adicionar datas a cada faixa
+                            faixa_edit["data_inicio"] = data_inicio_edit_var.strftime('%Y-%m-%d')
+                            faixa_edit["data_fim"] = data_fim_edit_var.strftime('%Y-%m-%d') if data_fim_edit_var else None
+                            
                             resultado, _ = salvar_alteracao_pendente("UPDATE", "fee_variavel", faixa_edit, usuario_atual, solicitacao_id)
                             if not resultado:
                                 sucesso = False

@@ -13,10 +13,11 @@ Sistema de gestão e cálculo de taxas financeiras (administração, gestão, cu
 - **`dashboard_sql_streamlit.py`**: Dashboard de visualização executando a query complexa de cálculo de taxas com filtros dinâmicos e provisão de waivers
 - **`Calculadora 5.0.sql`**: Query SQL principal (~600 linhas) que calcula taxas diárias, acumuladas mensais, correções por índices (IGPM/IPCA/IPC-FIPE) e compara com provisões Sinqia
 - **Tabelas BigQuery**:
-  - `kanastra-live.finance.fee_minimo`: Taxas mínimas por fundo/serviço/faixa
-  - `kanastra-live.finance.fee_variavel`: Taxas variáveis percentuais por fundo/serviço/faixa de PL
-  - `kanastra-live.finance.alteracoes_pendentes`: Workflow de aprovação (JSON com dados, status PENDENTE/APROVADO/REJEITADO)
+  - `kanastra-live.finance.fee_minimo`: Taxas mínimas por fundo/serviço/faixa + **data_inicio/data_fim**
+  - `kanastra-live.finance.fee_variavel`: Taxas variáveis percentuais por fundo/serviço/faixa de PL + **data_inicio/data_fim**
+  - `kanastra-live.finance.alteracoes_pendentes`: Workflow de aprovação (JSON com dados, status PENDENTE/APROVADO/REJEITADO, **solicitacao_id** para agrupar linhas relacionadas)
   - `kanastra-live.finance.historico_waivers`: Registro de waivers aplicados (provisionados/não provisionados)
+  - `kanastra-live.hub.funds`: Cadastro de fundos (id, name, government_id/cnpj)
 
 ## BigQuery Integration Patterns
 
@@ -75,15 +76,17 @@ USUARIOS = {
 ```
 
 ### Fluxo de Alterações
-1. **Editor** cria/edita taxa → `salvar_alteracao_pendente()` → JSON na tabela `alteracoes_pendentes`
-2. **Aprovador** revisa → Botão "Aprovar" executa INSERT/UPDATE real + atualiza status + registra aprovador
-3. **Validação crítica**: Sempre verificar se `tabela_selecionada` corresponde aos `dados_editados` carregados
+1. **Editor** cria/edita taxa → `salvar_alteracao_pendente()` → JSON na tabela `alteracoes_pendentes` com **solicitacao_id** único
+2. **Aprovador** revisa solicitações agrupadas → Botão "Aprovar Solicitação Completa" executa INSERT/UPDATE de TODAS as linhas em bloco
+3. **Agrupamento**: Múltiplas linhas relacionadas (ex: taxa mínima = 2 linhas, taxa variável = N faixas) compartilham mesmo `solicitacao_id`
+4. **Período de Vigência**: Todas as taxas possuem `data_inicio` (obrigatória) e `data_fim` (NULL = indefinido)
+5. **Validação crítica**: Sempre verificar se `tabela_selecionada` corresponde aos `dados_editados` carregados
 
 ### Formulários Distintos (4 tipos)
-- Taxa Mínima + Criar: Gera 2 linhas (faixa 0 e máxima)
-- Taxa Mínima + Editar: Atualiza fee_min de registro existente
-- Taxa Variável + Criar: N linhas (usuário define quantas faixas)
-- Taxa Variável + Editar: Carrega todas as faixas de um cliente+serviço para edição em lote
+- Taxa Mínima + Criar: Gera 2 linhas (faixa 0 e máxima) com **data_inicio/data_fim** + checkbox "vigência indefinida"
+- Taxa Mínima + Editar: Atualiza fee_min + **data_inicio/data_fim** de registro existente
+- Taxa Variável + Criar: N linhas (usuário define quantas faixas) + **data_inicio/data_fim** aplicadas a todas
+- Taxa Variável + Editar: Carrega todas as faixas de um cliente+serviço + **data_inicio/data_fim** aplicadas em lote
 
 ## Waiver Management (`dashboard_gestao_taxas.py`)
 
