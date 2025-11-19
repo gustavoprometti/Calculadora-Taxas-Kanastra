@@ -370,32 +370,39 @@ if 'df' in st.session_state:
             (df_filtrado['date_ref'].dt.date <= data_fim)
         ]
     
-    # APLICAR WAIVERS APROVADOS do histórico BigQuery
+    # APLICAR WAIVERS E DESCONTOS APROVADOS do BigQuery
     @st.cache_data(ttl=300)
-    def carregar_waivers_ativos(data_inicio_dt, data_fim_dt):
-        """Carrega waivers aprovados do histórico que se aplicam ao período"""
+    def carregar_ajustes_ativos(data_inicio_dt, data_fim_dt):
+        """Carrega waivers e descontos aprovados que se aplicam ao período"""
         try:
             client = get_bigquery_client()
             query = f"""
             SELECT 
+                fund_id,
                 fund_name,
-                valor_waiver,
-                tipo_waiver,
+                categoria,
+                tipo_desconto,
+                valor_desconto,
+                percentual_desconto,
+                forma_aplicacao,
+                servico,
                 data_inicio,
-                data_fim
-            FROM `kanastra-live.finance.historico_waivers`
+                data_fim,
+                observacao
+            FROM `kanastra-live.finance.descontos`
             WHERE data_inicio <= DATE('{data_fim_dt}')
-              AND data_fim >= DATE('{data_inicio_dt}')
+              AND (data_fim IS NULL OR data_fim >= DATE('{data_inicio_dt}'))
+            ORDER BY categoria, data_inicio
             """
             df = client.query(query).to_dataframe()
             return df
         except Exception as e:
-            st.warning(f"⚠️ Não foi possível carregar waivers: {e}")
+            st.warning(f"⚠️ Não foi possível carregar ajustes (waivers/descontos): {e}")
             return pd.DataFrame()
     
-    waivers_ativos = carregar_waivers_ativos(data_inicio, data_fim)
+    ajustes_ativos = carregar_ajustes_ativos(data_inicio, data_fim)
     
-    if not waivers_ativos.empty:
+    if not ajustes_ativos.empty:
         # Encontrar coluna de acumulado
         col_acumulado = None
         for col in df_filtrado.columns:
@@ -404,42 +411,91 @@ if 'df' in st.session_state:
                 break
         
         if col_acumulado:
-            waivers_aplicados = []
-            for _, waiver in waivers_ativos.iterrows():
-                fund_name = waiver['fund_name']
-                valor = waiver['valor_waiver']
-                tipo_waiver = waiver['tipo_waiver']
+            ajustes_aplicados = []
+            for _, ajuste in ajustes_ativos.iterrows():
+                # Compatibilidade: waivers usam fund_name, descontos usam fund_id
+                if 'fund_name' in ajuste and pd.notnull(ajuste.get('fund_name')):
+                    fund_identifier = ajuste['fund_name']
+                    mask_campo = 'fund_name'
+                else:
+                    fund_identifier = ajuste.get('fund_id')
+                    mask_campo = 'fund_id'
                 
-                if valor > 0:
-                    # Filtrar registros do fundo no período do waiver
-                    mask_fundo = (df_filtrado['fund_name'] == fund_name)
+                valor = ajuste.get('valor', 0)
+                tipo_desconto = ajuste.get('tipo_desconto', 'Fixo')
+                percentual = ajuste.get('percentual_desconto', 0)
+                forma_aplicacao = ajuste.get('forma_aplicacao', 'Provisionado')
+                categoria = ajuste.get('categoria', 'waiver')
+                servico = ajuste.get('servico')
+                
+                if valor > 0 or percentual > 0:
+                    # Filtrar registros do fundo
+                    mask_fundo = (df_filtrado[mask_campo] == fund_identifier)
+                    
+                    # Filtrar por período se disponível
                     if 'date_ref' in df_filtrado.columns:
                         mask_fundo = mask_fundo & (
-                            (df_filtrado['date_ref'].dt.date >= waiver['data_inicio']) &
-                            (df_filtrado['date_ref'].dt.date <= waiver['data_fim'])
+                            (df_filtrado['date_ref'].dt.date >= ajuste['data_inicio']) &
+                            (df_filtrado['date_ref'].dt.date <= ajuste['data_fim'])
                         )
                     
+                    # Filtrar por serviço se especificado
+                    if servico and ('Service' in df_filtrado.columns or 'servico' in df_filtrado.columns):
+                        col_servico = 'Service' if 'Service' in df_filtrado.columns else 'servico'
+                        mask_fundo = mask_fundo & (df_filtrado[col_servico] == servico)
+                    
                     if mask_fundo.sum() > 0:
-                        if tipo_waiver == "Provisionado":
+                        # Calcular valor do ajuste baseado no tipo
+                        if tipo_desconto == 'Percentual':
+                            # Para percentual, calcular desconto sobre cada taxa
+                            valores_ajuste = df_filtrado.loc[mask_fundo, col_acumulado] * (percentual / 100)
+                            valor_total_aplicado = valores_ajuste.sum()
+                        else:
+                            # Para Fixo, usar valor direto
+                            valor_total_aplicado = valor
+                        
+                        # Aplicar baseado na forma
+                        if forma_aplicacao == "Provisionado":
                             # Provisionado: distribuir proporcionalmente
                             qtd_registros = mask_fundo.sum()
-                            valor_por_registro = valor / qtd_registros if qtd_registros > 0 else 0
                             
-                            df_filtrado.loc[mask_fundo, col_acumulado] = (
-                                df_filtrado.loc[mask_fundo, col_acumulado] - valor_por_registro
+                            if tipo_desconto == 'Percentual':
+                                # Percentual: aplicar desconto em cada registro individualmente
+                                df_filtrado.loc[mask_fundo, col_acumulado] = (
+                                    df_filtrado.loc[mask_fundo, col_acumulado] * (1 - percentual/100)
+                                )
+                            else:
+                                # Fixo: distribuir valor igualmente
+                                valor_por_registro = valor / qtd_registros if qtd_registros > 0 else 0
+                                df_filtrado.loc[mask_fundo, col_acumulado] = (
+                                    df_filtrado.loc[mask_fundo, col_acumulado] - valor_por_registro
+                                )
+                            
+                            ajustes_aplicados.append(
+                                f"{fund_identifier} ({categoria}): R$ {valor_total_aplicado:,.2f} {tipo_desconto} Provisionado"
                             )
-                            waivers_aplicados.append(f"{fund_name}: R$ {valor:,.2f} Provisionado")
                         else:
                             # Não Provisionado: aplicar no último registro
                             idx_ultimo = df_filtrado[mask_fundo].index.max()
                             if pd.notnull(idx_ultimo):
-                                df_filtrado.at[idx_ultimo, col_acumulado] = (
-                                    df_filtrado.at[idx_ultimo, col_acumulado] - valor
+                                if tipo_desconto == 'Percentual':
+                                    # Percentual: aplicar desconto no último registro
+                                    df_filtrado.at[idx_ultimo, col_acumulado] = (
+                                        df_filtrado.at[idx_ultimo, col_acumulado] * (1 - percentual/100)
+                                    )
+                                else:
+                                    # Fixo: subtrair valor total do último registro
+                                    df_filtrado.at[idx_ultimo, col_acumulado] = (
+                                        df_filtrado.at[idx_ultimo, col_acumulado] - valor
+                                    )
+                                
+                                ajustes_aplicados.append(
+                                    f"{fund_identifier} ({categoria}): R$ {valor_total_aplicado:,.2f} {tipo_desconto} Não Provisionado"
                                 )
-                                waivers_aplicados.append(f"{fund_name}: R$ {valor:,.2f} Não Provisionado")
             
-            if waivers_aplicados:
-                st.success(f"✅ **Waivers Aplicados ({len(waivers_aplicados)}):** {' | '.join(waivers_aplicados)}")
+            if ajustes_aplicados:
+                st.success(f"✅ **Ajustes Aplicados ({len(ajustes_aplicados)}):** {' | '.join(ajustes_aplicados)}")
+
     
     # Usar o DataFrame filtrado
     df = df_filtrado
