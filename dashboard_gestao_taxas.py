@@ -786,22 +786,49 @@ st.markdown("---")
 # NAVEGAÇÃO POR ABAS
 # =======================
 
-# Criar abas na sidebar
-st.sidebar.markdown("---")
-st.sidebar.header("📑 Navegação")
+# Navegação moderna na sidebar
+with st.sidebar:
+    st.markdown("### 📑 Painéis")
+    
+    # Cards de navegação estilo moderno
+    opcoes = [
+        ("📋 Criação/Alteração de Taxas - Regulamento", "taxas"),
+        ("💰 Waivers", "waivers"),
+        ("🎯 Descontos", "descontos")
+    ]
+    
+    # Inicializar seleção se não existir
+    if 'aba_selecionada' not in st.session_state:
+        st.session_state.aba_selecionada = "📋 Criação/Alteração de Taxas - Regulamento"
+    
+    for label, key in opcoes:
+        is_selected = st.session_state.aba_selecionada == label
+        
+        if is_selected:
+            st.markdown(f"""
+            <div style="
+                padding: 1rem 1.25rem;
+                margin: 0.75rem 0;
+                border-radius: 12px;
+                background: linear-gradient(135deg, #14735a 0%, #2daa82 100%);
+                color: white;
+                text-align: center;
+                font-size: 1rem;
+                font-weight: 700;
+                box-shadow: 0 4px 12px rgba(20, 115, 90, 0.3);
+            ">
+                {label}
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            if st.button(label, key=f"nav_{key}", use_container_width=True):
+                st.session_state.aba_selecionada = label
+                st.rerun()
+    
+    st.markdown("---")
 
-# Seleção de aba
-aba_selecionada = st.sidebar.radio(
-    "Selecione o painel:",
-    [
-        "📋 Criação/Alteração de Taxas - Regulamento",
-        "💰 Waivers",
-        "🎯 Descontos"
-    ],
-    key="aba_navegacao"
-)
-
-st.sidebar.markdown("---")
+# Obter aba selecionada do session_state
+aba_selecionada = st.session_state.aba_selecionada
 
 # =======================
 # ABA 1: CRIAÇÃO/ALTERAÇÃO DE TAXAS - REGULAMENTO
@@ -2324,29 +2351,3 @@ if perfil == "aprovador":
         st.caption(f"📊 Exibindo últimas 50 alterações aprovadas (waivers e descontos ativos)")
     else:
         st.info("ℹ️ Nenhuma alteração aprovada no histórico ainda")
-
-# Sidebar
-st.sidebar.header("ℹ️ Como Usar")
-st.sidebar.markdown("""
-### 📋 Passo a Passo:
-1. **Faça login** com suas credenciais
-2. **Selecione** a tabela desejada
-3. **Carregue** os dados
-4. **Visualize** a planilha completa
-5. **Crie ou edite** taxas usando os formulários
-6. **Aguarde aprovação** de um aprovador
-
-### 👥 Perfis de Usuário:
-
-**✏️ Editor** (Gustavo, Finance User)
-- Pode adicionar novas taxas
-- Pode editar taxas existentes
-- Alterações ficam pendentes de aprovação
-- Visualiza apenas suas próprias alterações
-
-**👑 Aprovador** (Eric, Thiago)
-- Todas as permissões de Editor
-- Pode aprovar/rejeitar alterações
-- Visualiza todas as alterações pendentes
-- Pode aplicar mudanças ao BigQuery
-""")
