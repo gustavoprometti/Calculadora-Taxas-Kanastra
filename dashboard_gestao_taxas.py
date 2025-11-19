@@ -1468,33 +1468,273 @@ elif aba_selecionada == "🎯 Descontos":
     st.header("🎯 Gestão de Descontos")
     st.markdown("---")
     
-    st.info("🚧 **Painel de Descontos em Desenvolvimento**")
+    # Serviços disponíveis
+    SERVICOS_DISPONIVEIS = ["Administração", "Gestão", "Custódia", "Agente Monitoramento", "Performance"]
     
-    st.markdown("""
-    ### 📋 Funcionalidades Planejadas:
+    # Seção: Criar Novo Desconto
+    st.subheader("➕ Criar Novo Desconto")
     
-    - 📝 **Criar novos descontos** para fundos específicos
-    - 📊 **Visualizar descontos** ativos e históricos
-    - ✏️ **Editar descontos** existentes
-    - 🗑️ **Remover descontos** quando necessário
-    - 📈 **Relatórios** de descontos por período e fundo
-    - 🔔 **Alertas** de descontos próximos do vencimento
+    # Carregar fundos completos (ID + Nome + CNPJ)
+    fundos_completos = carregar_fundos_completos()
     
-    ### 💡 Tipos de Desconto:
+    if fundos_completos.empty:
+        st.warning("⚠️ Nenhum fundo disponível no sistema")
+    else:
+        # Criar opções para o selectbox
+        opcoes_fundos = [f"{row['id']} - {row['name']} ({row['cnpj']})" 
+                        for _, row in fundos_completos.iterrows()]
+        
+        # Seleção de fundo FORA do formulário
+        fundo_selecionado = st.selectbox(
+            "🏢 Selecione o fundo:",
+            [""] + opcoes_fundos,
+            key="fundo_desconto_select",
+            help="Escolha o fundo que receberá o desconto"
+        )
+        
+        if not fundo_selecionado:
+            st.info("👆 Selecione um fundo para configurar o desconto")
+        else:
+            # Extrair fund_id da seleção
+            fund_id_selecionado = int(fundo_selecionado.split(" - ")[0])
+            fund_name_selecionado = fundo_selecionado.split(" - ")[1].split(" (")[0]
+            
+            # Mostrar formulário
+            with st.form("form_criar_desconto"):
+                st.markdown("### 📝 Configure o desconto")
+                st.info(f"✅ Fundo selecionado: **{fund_name_selecionado}** (ID: {fund_id_selecionado})")
+                
+                st.markdown("---")
+                
+                # Origem do desconto
+                col_origem1, col_origem2 = st.columns(2)
+                
+                with col_origem1:
+                    origem_desconto = st.selectbox(
+                        "📋 Origem do Desconto:",
+                        ["comercial", "juridico"],
+                        format_func=lambda x: "🤝 Comercial (Acordo Comercial)" if x == "comercial" else "⚖️ Jurídico (Ordem Judicial)",
+                        help="• Comercial: Negociações e acordos comerciais\n• Jurídico: Ordens judiciais e decisões obrigatórias"
+                    )
+                
+                with col_origem2:
+                    documento_referencia = st.text_input(
+                        "📄 Documento de Referência:",
+                        placeholder="Nº do processo, contrato, etc.",
+                        help="Número do processo judicial, contrato ou documento que originou o desconto"
+                    )
+                
+                st.markdown("---")
+                
+                # Tipo de desconto (Total = Fixo, Parcial = Percentual)
+                tipo_desconto_opcao = st.radio(
+                    "💰 Tipo de Desconto:",
+                    ["Total (Valor Fixo em R$)", "Parcial (Percentual)"],
+                    horizontal=True,
+                    help="• Total: Valor fixo em reais\n• Parcial: Percentual de desconto sobre a taxa calculada"
+                )
+                
+                tipo_desconto = "Fixo" if "Total" in tipo_desconto_opcao else "Percentual"
+                
+                col_valor1, col_valor2 = st.columns(2)
+                
+                with col_valor1:
+                    if tipo_desconto == "Fixo":
+                        valor_desconto = st.number_input(
+                            "💵 Valor do Desconto (R$):",
+                            min_value=0.0,
+                            value=0.0,
+                            step=100.0,
+                            format="%.2f",
+                            help="Valor fixo em reais que será deduzido"
+                        )
+                        percentual_desconto = None
+                    else:
+                        percentual_desconto = st.number_input(
+                            "📊 Percentual de Desconto (%):",
+                            min_value=0.0,
+                            max_value=100.0,
+                            value=0.0,
+                            step=1.0,
+                            format="%.2f",
+                            help="Percentual que será aplicado sobre a taxa calculada"
+                        )
+                        valor_desconto = 0.0  # Será calculado na aplicação
+                
+                with col_valor2:
+                    forma_aplicacao = st.selectbox(
+                        "📊 Forma de Aplicação:",
+                        ["Provisionado", "Nao_Provisionado"],
+                        format_func=lambda x: "🔄 Provisionado (Distribuído)" if x == "Provisionado" else "📍 Não Provisionado (Último Registro)",
+                        help="• Provisionado: distribui o desconto proporcionalmente por todos os registros do período\n• Não Provisionado: aplica o desconto total no último registro do período"
+                    )
+                
+                st.markdown("---")
+                
+                # Serviços (múltipla seleção)
+                st.markdown("### 🔧 Serviços")
+                st.caption("Selecione os serviços nos quais o desconto será aplicado. Se nenhum for selecionado, o desconto será aplicado em TODOS os serviços.")
+                
+                servicos_selecionados = st.multiselect(
+                    "Selecione os serviços:",
+                    SERVICOS_DISPONIVEIS,
+                    help="Deixe vazio para aplicar em todos os serviços do fundo"
+                )
+                
+                if not servicos_selecionados:
+                    st.info("ℹ️ Desconto será aplicado em **TODOS** os serviços do fundo")
+                else:
+                    st.success(f"✅ Desconto será aplicado apenas em: **{', '.join(servicos_selecionados)}**")
+                
+                st.markdown("---")
+                
+                # Período de vigência
+                st.markdown("### 📅 Período de Aplicação")
+                col_data1, col_data2, col_data3 = st.columns([3, 3, 2])
+                
+                with col_data1:
+                    data_inicio_desconto = st.date_input(
+                        "Data Início:",
+                        value=datetime.now().date(),
+                        key="data_inicio_desconto"
+                    )
+                
+                with col_data2:
+                    vigencia_indefinida_desc = st.checkbox(
+                        "⏰ Vigência indefinida",
+                        value=False,
+                        help="Marque se o desconto não tem data de término"
+                    )
+                    
+                    if not vigencia_indefinida_desc:
+                        data_fim_desconto = st.date_input(
+                            "Data Fim:",
+                            value=datetime.now().date(),
+                            key="data_fim_desconto"
+                        )
+                    else:
+                        data_fim_desconto = None
+                        st.info("⏰ Desconto sem data de término")
+                
+                with col_data3:
+                    if data_fim_desconto:
+                        dias = (data_fim_desconto - data_inicio_desconto).days + 1
+                        st.metric("📆 Dias", dias)
+                    else:
+                        st.metric("📆 Dias", "Indefinido")
+                
+                # Observação
+                observacao_desconto = st.text_area(
+                    "📝 Observação:",
+                    placeholder="Digite informações adicionais sobre este desconto (motivo, justificativa, contexto)...",
+                    key="obs_desconto",
+                    height=100
+                )
+                
+                st.markdown("---")
+                
+                # Resumo antes de enviar
+                st.markdown("### 📋 Resumo do Desconto")
+                col_res1, col_res2, col_res3 = st.columns(3)
+                
+                with col_res1:
+                    st.metric("🏢 Fundo", fund_name_selecionado)
+                    st.caption(f"ID: {fund_id_selecionado}")
+                
+                with col_res2:
+                    if tipo_desconto == "Fixo":
+                        st.metric("💰 Valor", f"R$ {valor_desconto:,.2f}")
+                        st.caption("Desconto Total")
+                    else:
+                        st.metric("📊 Desconto", f"{percentual_desconto}%")
+                        st.caption("Desconto Parcial")
+                
+                with col_res3:
+                    origem_label = "🤝 Comercial" if origem_desconto == "comercial" else "⚖️ Jurídico"
+                    st.metric("📋 Origem", origem_label)
+                    st.caption(forma_aplicacao.replace("_", " "))
+                
+                submitted_desconto = st.form_submit_button(
+                    "➕ Criar Desconto", 
+                    use_container_width=True, 
+                    type="primary"
+                )
+                
+                if submitted_desconto:
+                    # Validações
+                    erros = []
+                    
+                    if tipo_desconto == "Fixo" and valor_desconto <= 0:
+                        erros.append("❌ Valor do desconto deve ser maior que zero")
+                    
+                    if tipo_desconto == "Percentual" and percentual_desconto <= 0:
+                        erros.append("❌ Percentual de desconto deve ser maior que zero")
+                    
+                    if not documento_referencia:
+                        erros.append("❌ Documento de referência é obrigatório")
+                    
+                    if data_fim_desconto and data_fim_desconto < data_inicio_desconto:
+                        erros.append("❌ Data fim não pode ser anterior à data início")
+                    
+                    if erros:
+                        for erro in erros:
+                            st.error(erro)
+                    else:
+                        # Criar solicitação de desconto para cada serviço selecionado
+                        # Se nenhum serviço foi selecionado, cria UMA solicitação com servico=NULL
+                        usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                        solicitacao_id = str(uuid.uuid4())
+                        sucesso = True
+                        
+                        servicos_para_criar = servicos_selecionados if servicos_selecionados else [None]
+                        
+                        for servico in servicos_para_criar:
+                            dados_desconto = {
+                                "fund_id": fund_id_selecionado,
+                                "fund_name": fund_name_selecionado,
+                                "valor_desconto": valor_desconto if tipo_desconto == "Fixo" else 0.0,
+                                "tipo_desconto": tipo_desconto,
+                                "percentual_desconto": percentual_desconto if tipo_desconto == "Percentual" else None,
+                                "forma_aplicacao": forma_aplicacao,
+                                "data_inicio": data_inicio_desconto.strftime('%Y-%m-%d'),
+                                "data_fim": data_fim_desconto.strftime('%Y-%m-%d') if data_fim_desconto else None,
+                                "servico": servico,
+                                "observacao": observacao_desconto or f"Desconto {origem_desconto} criado via Dashboard",
+                                "documento_referencia": documento_referencia
+                            }
+                            
+                            resultado, _ = salvar_alteracao_pendente(
+                                "INSERT", 
+                                "desconto", 
+                                dados_desconto, 
+                                usuario_atual, 
+                                solicitacao_id,
+                                tipo_categoria="desconto",
+                                origem=origem_desconto
+                            )
+                            
+                            if not resultado:
+                                sucesso = False
+                                break
+                        
+                        if sucesso:
+                            qtd_servicos = len(servicos_para_criar)
+                            if servicos_selecionados:
+                                st.success(f"✅ Desconto criado para {qtd_servicos} serviço(s) e enviado para aprovação!")
+                                st.info(f"📋 Serviços: {', '.join(servicos_selecionados)}")
+                            else:
+                                st.success(f"✅ Desconto criado para TODOS os serviços e enviado para aprovação!")
+                            
+                            st.info("⏳ Aguardando aprovação de um aprovador")
+                            st.rerun()
+                        else:
+                            st.error("❌ Erro ao salvar desconto")
     
-    - **Desconto Percentual**: Redução de X% sobre a taxa calculada
-    - **Desconto Fixo**: Redução de valor fixo em R$
-    - **Desconto Temporário**: Válido por período específico
-    - **Desconto Permanente**: Aplicado indefinidamente
+    st.markdown("---")
     
-    ---
-    
-    *Este painel será implementado em breve.*
-    """)
-    
-    # Espaço para futuras funcionalidades
-    with st.expander("🔍 Ver Descontos Ativos (Em Desenvolvimento)"):
-        st.write("Aqui será exibida uma tabela com todos os descontos atualmente ativos.")
+    # Seção: Histórico de Descontos (futuro)
+    st.subheader("📊 Histórico de Descontos")
+    st.info("🚧 Em breve: visualização de descontos aprovados e ativos")
 
 st.markdown("---")
 

@@ -183,12 +183,22 @@ elif aba_selecionada == "🎯 Descontos":
 
 ### Fluxo Completo de Descontos
 1. **Criação**: Editor/Aprovador cria desconto na aba "🎯 Descontos" especificando:
-   - Fundo, valor/percentual, tipo (Fixo/Percentual)
+   - Fundo (obrigatório - seleção via BigQuery de hub.funds)
+   - **Tipo de Desconto**:
+     - **Total (Fixo)**: Valor fixo em R$ (ex: R$ 5.000)
+     - **Parcial (Percentual)**: % sobre taxa calculada (ex: 10%)
+   - **Forma de Aplicação**:
+     - **Provisionado**: Distribui desconto por todos registros do período
+     - **Não Provisionado**: Aplica desconto total no último registro
    - **Origem obrigatória**: "juridico" (ordem judicial) ou "comercial" (acordo)
-   - Período de vigência (data_inicio/data_fim)
-   - Serviço específico ou NULL para todos
-   - Documento de referência (processo, contrato)
+   - **Serviços** (múltipla seleção): Administração, Gestão, Custódia, Agente Monitoramento, Performance
+     - Se nenhum selecionado → aplica em TODOS os serviços (servico=NULL)
+     - Se selecionados → cria uma linha para cada serviço
+   - Período de vigência (data_inicio obrigatória, data_fim opcional com checkbox "vigência indefinida")
+   - Documento de referência **obrigatório** (processo, contrato)
+   - Observação opcional
 2. **Aprovação**: Salvo em `alteracoes_pendentes` com `tipo_alteracao_categoria='desconto'` e `origem`
+   - Cria N linhas agrupadas por `solicitacao_id` (uma por serviço selecionado)
 3. **Execução**: Ao aprovar, sistema insere em `finance.descontos` com `categoria='desconto_juridico'` ou `'desconto_comercial'`
 4. **Calculadora**: Query busca ajustes ativos (waivers + descontos) por fundo/data/serviço usando campo `categoria`
 5. **Histórico**: Registro permanente em `historico_alteracoes`
