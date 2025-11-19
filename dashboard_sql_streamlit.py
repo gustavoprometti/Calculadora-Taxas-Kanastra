@@ -417,17 +417,10 @@ if 'df' in st.session_state:
             if not result.empty:
                 total = int(result.iloc[0]['total_pendente'])
                 solicitacoes = int(result.iloc[0]['solicitacoes_pendentes'])
-                
-                # DEBUG: Mostrar valores na sidebar
-                st.sidebar.success(f"✅ Verificação OK: {total} pendente(s), {solicitacoes} solicitação(ões)")
-                
                 return total, solicitacoes
             
-            # DEBUG: DataFrame vazio
-            st.sidebar.info("ℹ️ Nenhuma alteração pendente encontrada")
             return 0, 0
         except Exception as e:
-            st.sidebar.error(f"⚠️ ERRO ao verificar pendentes: {str(e)}")
             return 0, 0
     
     # APLICAR WAIVERS E DESCONTOS APROVADOS do BigQuery
@@ -482,10 +475,6 @@ if 'df' in st.session_state:
     
     # Verificar alterações pendentes - SEM CACHE para garantir precisão no bloqueio
     total_pendente, solicitacoes_pendentes = verificar_alteracoes_pendentes()
-    
-    # DEBUG: Mostrar valor de verificação (remover após teste)
-    if total_pendente > 0:
-        st.warning(f"🔴 DEBUG: total_pendente = {total_pendente}, solicitacoes_pendentes = {solicitacoes_pendentes}")
     
     # AVISOS DE ALTERAÇÕES PENDENTES E AJUSTES ATIVOS
     st.divider()
