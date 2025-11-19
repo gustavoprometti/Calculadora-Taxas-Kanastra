@@ -928,41 +928,48 @@ elif aba_selecionada == "💰 Waivers":
         
         # Seleção de fundos
         fundos_selecionados = st.multiselect(
-            "Selecione os fundos para aplicar o waiver:",
+            "🏢 Selecione os fundos para aplicar o waiver:",
             fundos_disponiveis,
             help="Escolha um ou mais fundos"
         )
         
+        waivers_data = []
+        
         if fundos_selecionados:
             st.markdown("---")
-            st.markdown("### 💰 Configure os valores para cada fundo")
+            st.markdown("### 💰 Configure o valor e tipo para cada fundo")
+            st.caption("Para cada fundo selecionado, defina o valor do waiver e se será provisionado ou não.")
             
-            waivers_data = []
-            
-            for fundo in fundos_selecionados:
-                st.markdown(f"**{fundo}:**")
-                col1, col2, col3 = st.columns([2, 2, 1])
+            for idx, fundo in enumerate(fundos_selecionados, 1):
+                st.markdown(f"#### {idx}. {fundo}")
+                col1, col2, col3 = st.columns([3, 3, 2])
                 
                 with col1:
                     valor_waiver = st.number_input(
-                        f"Valor (R$)",
+                        f"💵 Valor do Waiver (R$)",
                         min_value=0.0,
                         value=0.0,
                         step=100.0,
                         format="%.2f",
-                        key=f"valor_waiver_{fundo}"
+                        key=f"valor_waiver_{fundo}",
+                        help="Valor em reais que será descontado da provisão"
                     )
                 
                 with col2:
                     tipo_waiver = st.selectbox(
-                        f"Tipo",
+                        f"📊 Tipo de Aplicação",
                         ["Provisionado", "Não Provisionado"],
                         key=f"tipo_waiver_{fundo}",
-                        help="Provisionado: distribui proporcionalmente | Não Provisionado: aplica no último registro"
+                        help="• Provisionado: distribui o valor proporcionalmente por todos os registros do período\n• Não Provisionado: aplica o valor total no último registro do período"
                     )
                 
                 with col3:
-                    st.metric("Total", f"R$ {valor_waiver:,.2f}")
+                    st.metric("💰 Total", f"R$ {valor_waiver:,.2f}")
+                    if valor_waiver > 0:
+                        if tipo_waiver == "Provisionado":
+                            st.caption("🔄 Distribuído")
+                        else:
+                            st.caption("📍 Último registro")
                 
                 waivers_data.append({
                     "fund_name": fundo,
@@ -971,6 +978,8 @@ elif aba_selecionada == "💰 Waivers":
                 })
                 
                 st.divider()
+        else:
+            st.warning("⚠️ Selecione pelo menos um fundo para continuar")
         
         # Datas do período
         st.markdown("### 📅 Período de Aplicação")
