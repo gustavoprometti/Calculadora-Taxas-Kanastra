@@ -278,7 +278,7 @@ def executar_query_bigquery(_client, query, data_inicio_str, data_fim_str):
         return None, 0, str(e)
 
 # Botão para executar
-if st.sidebar.button("🚀 Executar Query SQL", type="primary", use_container_width=True):
+if st.sidebar.button("🚀 Executar Query SQL", type="primary", width='stretch'):
     st.session_state['execute_query'] = True
 
 # Executar query automaticamente ou quando solicitado
@@ -771,13 +771,13 @@ if 'df' in st.session_state:
             st.info(f"📊 Exibindo **{len(df):,}** registros")
     
     with col2:
-        if st.button("🔄 Cache Geral", use_container_width=True):
+        if st.button("🔄 Cache Geral", width='stretch'):
             st.cache_data.clear()
             st.success("✅ Cache limpo!")
             st.rerun()
     
     with col3:
-        if st.button("🔃 Recarregar Ajustes", use_container_width=True, help="Força recarga de waivers e descontos"):
+        if st.button("🔃 Recarregar Ajustes", width='stretch', help="Força recarga de waivers e descontos"):
             st.session_state.force_reload_ajustes = True
             st.rerun()
     
@@ -786,7 +786,7 @@ if 'df' in st.session_state:
         if total_pendente_atual > 0:
             st.button(
                 label="📥 CSV Completo",
-                use_container_width=True,
+                width='stretch',
                 type="primary",
                 disabled=True,
                 help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes_atual} solicitação(ões) pendente(s) de aprovação"
@@ -804,7 +804,7 @@ if 'df' in st.session_state:
                 file_name=f'calculadora_taxas{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
                 mime='text/csv',
                 type="primary",
-                use_container_width=True,
+                width='stretch',
                 help="✅ Exportar todas as colunas com ajustes aplicados"
             )
     
@@ -813,7 +813,7 @@ if 'df' in st.session_state:
         if total_pendente_atual > 0:
             st.button(
                 label="📄 CSV Resumido",
-                use_container_width=True,
+                width='stretch',
                 disabled=True,
                 help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes_atual} solicitação(ões) pendente(s) de aprovação"
             )
@@ -829,7 +829,7 @@ if 'df' in st.session_state:
                 data=download_filtrado,
                 file_name=f'calculadora_resumo{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
                 mime='text/csv',
-                use_container_width=True,
+                width='stretch',
                 help="✅ Exportar colunas formatadas com ajustes aplicados"
             )
     
@@ -853,7 +853,7 @@ if 'df' in st.session_state:
     # Mostrar tabela
     st.dataframe(
         df_exibir,
-        use_container_width=True,
+        width='stretch',
         height=600,
         hide_index=True,
         column_config=column_config
@@ -910,7 +910,7 @@ if 'df' in st.session_state:
                 xaxis_tickangle=-45
             )
             
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, width='stretch')
         
         with col_grafico2:
             st.markdown("### Diferença máxima por tipo de serviço")
@@ -942,7 +942,7 @@ if 'df' in st.session_state:
                 height=600
             )
             
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2, width='stretch')
     
     # Informações adicionais
     with st.expander("ℹ️ Informações da Query"):

@@ -540,7 +540,7 @@ if not st.session_state.usuario_logado:
         senha = st.text_input("Senha", type="password", key="senha")
     
     with col_login3:
-        if st.button("🔓 Entrar", use_container_width=True, type="primary"):
+        if st.button("🔓 Entrar", width='stretch', type="primary"):
             if usuario in USUARIOS and USUARIOS[usuario]["senha"] == senha:
                 # Login bem-sucedido
                 st.session_state.usuario_logado = usuario
@@ -591,7 +591,7 @@ with col_user1:
     """, unsafe_allow_html=True)
 
 with col_user2:
-    if st.button("🚪 Sair", use_container_width=True, type="secondary"):
+    if st.button("🚪 Sair", width='stretch', type="secondary"):
         st.session_state.usuario_logado = None
         st.session_state.perfil_usuario = None
         st.session_state.usuario_aprovador = None
@@ -651,7 +651,7 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
         tabela = opcoes_tabela[tabela_display]
 
     with col2:
-        if st.button("📊 Carregar Dados", use_container_width=True, type="primary"):
+        if st.button("📊 Carregar Dados", width='stretch', type="primary"):
             # Limpar cache antes de carregar novos dados
             carregar_dados_bigquery.clear()
             
@@ -744,7 +744,7 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                 
                 fee_min = st.number_input("Fee Mínimo (R$)", min_value=0.0, step=100.0, format="%.2f")
                 
-                submitted = st.form_submit_button("➕ Criar Taxa Mínima", use_container_width=True, type="primary")
+                submitted = st.form_submit_button("➕ Criar Taxa Mínima", width='stretch', type="primary")
                 
                 if submitted:
                     # Criar DUAS linhas: faixa 0 e faixa máxima (1000000000000000)
@@ -807,7 +807,7 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                 with col3:
                     novo_fee_min = st.number_input("Novo Fee Mínimo (R$)", min_value=0.0, step=100.0, format="%.2f")
             
-                submitted_edit = st.form_submit_button("💾 Salvar Novo Valor", use_container_width=True, type="primary")
+                submitted_edit = st.form_submit_button("💾 Salvar Novo Valor", width='stretch', type="primary")
             
                 if submitted_edit:
                     # Buscar o registro pelo cliente e serviço
@@ -914,7 +914,7 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                         "fee_variavel": fee_pct
                     })
                 
-                submitted_var = st.form_submit_button("➕ Criar Taxas Variáveis", use_container_width=True, type="primary")
+                submitted_var = st.form_submit_button("➕ Criar Taxas Variáveis", width='stretch', type="primary")
             
                 if submitted_var:
                     # Criar uma linha para cada faixa com mesmo solicitacao_id
@@ -970,7 +970,7 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                         key="edit_var_service"
                     )
             
-                submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", use_container_width=True, type="primary")
+                submitted_buscar = st.form_submit_button("🔍 Carregar Faixas para Edição", width='stretch', type="primary")
             
                 if submitted_buscar:
                     df = st.session_state.dados_editados
@@ -1037,10 +1037,10 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                     col_btn1, col_btn2 = st.columns(2)
                 
                     with col_btn1:
-                        submitted_update = st.form_submit_button("💾 Salvar Todas as Alterações", use_container_width=True, type="primary")
+                        submitted_update = st.form_submit_button("💾 Salvar Todas as Alterações", width='stretch', type="primary")
                 
                     with col_btn2:
-                        cancelar_update = st.form_submit_button("❌ Cancelar", use_container_width=True)
+                        cancelar_update = st.form_submit_button("❌ Cancelar", width='stretch')
                 
                     if submitted_update:
                         # Salvar todas as faixas editadas no BigQuery com mesmo solicitacao_id
@@ -1092,7 +1092,7 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
     
         with col_filtro3:
             # Botão para limpar filtros
-            if st.button("🔄 Limpar Filtros", use_container_width=True):
+            if st.button("🔄 Limpar Filtros", width='stretch'):
                 st.rerun()
     
         # Aplicar filtros
@@ -1109,7 +1109,7 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
         # Planilha sempre visível com filtros aplicados
         st.dataframe(
             df_filtrado,
-            use_container_width=True,
+            width='stretch',
             height=400
         )
 
@@ -1190,12 +1190,12 @@ elif aba_selecionada == "💰 Waivers":
         col_fase1, col_fase2, col_fase3 = st.columns([2, 2, 4])
         
         with col_fase1:
-            if st.button("➕ Adicionar Fase", use_container_width=True):
+            if st.button("➕ Adicionar Fase", width='stretch'):
                 st.session_state.num_fases_waiver += 1
                 st.rerun()
         
         with col_fase2:
-            if st.button("➖ Remover Fase", use_container_width=True, disabled=st.session_state.num_fases_waiver <= 1):
+            if st.button("➖ Remover Fase", width='stretch', disabled=st.session_state.num_fases_waiver <= 1):
                 if st.session_state.num_fases_waiver > 1:
                     st.session_state.num_fases_waiver -= 1
                     st.rerun()
@@ -1305,7 +1305,7 @@ elif aba_selecionada == "💰 Waivers":
                 key="obs_waiver_fases"
             )
             
-            submitted_waiver = st.form_submit_button("➕ Criar Waivers Progressivos", use_container_width=True, type="primary")
+            submitted_waiver = st.form_submit_button("➕ Criar Waivers Progressivos", width='stretch', type="primary")
             
             if submitted_waiver:
                 # Validações
@@ -1456,7 +1456,7 @@ elif aba_selecionada == "💰 Waivers":
         # Exibir tabela
         st.dataframe(
             df_filtrado,
-            use_container_width=True,
+            width='stretch',
             height=400,
             column_config={
                 "id": None,  # Ocultar ID
@@ -1683,7 +1683,7 @@ elif aba_selecionada == "🎯 Descontos":
                 
                 submitted_desconto = st.form_submit_button(
                     "➕ Criar Desconto", 
-                    use_container_width=True, 
+                    width='stretch', 
                     type="primary"
                 )
                 
@@ -1832,13 +1832,13 @@ if solicitacoes_filtradas:
             # Criar DataFrame com todas as linhas
             dados_todas_linhas = [alteracao['dados'] for alteracao in solicitacao]
             df_solicitacao = pd.DataFrame(dados_todas_linhas)
-            st.dataframe(df_solicitacao, use_container_width=True, hide_index=True)
+            st.dataframe(df_solicitacao, width='stretch', hide_index=True)
         
         # Botões de aprovação/rejeição EM BLOCO (APENAS PARA APROVADORES)
         if perfil == "aprovador":
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
-                if st.button(f"✅ Aprovar Solicitação Completa", key=f"aprovar_solicitacao_{idx}", use_container_width=True, type="primary"):
+                if st.button(f"✅ Aprovar Solicitação Completa", key=f"aprovar_solicitacao_{idx}", width='stretch', type="primary"):
                     # Executar todas as alterações da solicitação
                     try:
                         client = get_bigquery_client()
@@ -2044,7 +2044,7 @@ if solicitacoes_filtradas:
                         st.error(f"❌ Erro geral ao processar solicitação: {str(e)}")
             
             with col_btn2:
-                if st.button(f"❌ Rejeitar Solicitação Completa", key=f"rejeitar_solicitacao_{idx}", use_container_width=True):
+                if st.button(f"❌ Rejeitar Solicitação Completa", key=f"rejeitar_solicitacao_{idx}", width='stretch'):
                     aprovador = st.session_state.usuario_logado
                     sucesso_rejeicao = True
                     for alteracao in solicitacao:
