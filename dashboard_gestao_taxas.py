@@ -1498,7 +1498,7 @@ elif aba_selecionada == "🎯 Descontos":
         st.warning("⚠️ Nenhum fundo disponível no sistema")
     else:
         # Criar opções para o selectbox
-        opcoes_fundos = [f"{row['id']} - {row['name']} ({row['cnpj']})" 
+        opcoes_fundos = [f"{row['fund_id']} - {row['fund_name']} ({row['cnpj']})" 
                         for _, row in fundos_completos.iterrows()]
         
         # Seleção de fundo FORA do formulário
