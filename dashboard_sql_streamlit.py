@@ -551,34 +551,7 @@ if 'df' in st.session_state:
             df = df[mask]
             st.info(f"🔍 Encontrados **{len(df)}** registros com '{busca}'")
     
-    # Botões de ação
-    col1, col2, col3 = st.columns([2, 1, 1])
-    
-    with col1:
-        st.info(f"📊 Exibindo **{len(df):,}** registros")
-    
-    with col2:
-        if st.button("🔄 Limpar Cache", use_container_width=True):
-            st.cache_data.clear()
-            st.success("✅ Cache limpo!")
-            st.rerun()
-    
-    with col3:
-        download_csv = df.to_csv(index=False).encode('utf-8')
-        
-        st.download_button(
-            label="📥 Exportar CSV",
-            data=download_csv,
-            file_name=f'calculadora_taxas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-            mime='text/csv',
-            type="primary",
-            use_container_width=True
-        )
-    
-    # Exibir tabela
-    st.subheader("📋 Resultados da Query SQL")
-    
-    # Selecionar e renomear apenas as colunas desejadas
+    # Preparar DataFrame para exibição (antes dos botões para permitir exportação)
     colunas_desejadas = {
         'date_ref': 'Dia',
         'fund_name': 'Nome do fundo',
@@ -604,6 +577,56 @@ if 'df' in st.session_state:
     
     # Renomear as colunas
     df_exibir.rename(columns={col: colunas_desejadas[col] for col in colunas_existentes}, inplace=True)
+    
+    # Botões de ação e exportação
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    
+    with col1:
+        # Verificar se há ajustes aplicados
+        if not ajustes_ativos.empty:
+            st.success(f"✅ **{len(df):,}** registros (com ajustes aplicados)")
+        else:
+            st.info(f"📊 Exibindo **{len(df):,}** registros")
+    
+    with col2:
+        if st.button("🔄 Limpar Cache", use_container_width=True):
+            st.cache_data.clear()
+            st.success("✅ Cache limpo!")
+            st.rerun()
+    
+    with col3:
+        # Exportar CSV completo (todas as colunas)
+        download_csv = df.to_csv(index=False).encode('utf-8')
+        
+        # Nome do arquivo indica se tem ajustes
+        sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
+        
+        st.download_button(
+            label="📥 CSV Completo",
+            data=download_csv,
+            file_name=f'calculadora_taxas{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            mime='text/csv',
+            type="primary",
+            use_container_width=True
+        )
+    
+    with col4:
+        # Exportar apenas dados filtrados exibidos na tela (colunas formatadas)
+        download_filtrado = df_exibir.to_csv(index=False).encode('utf-8')
+        
+        # Nome do arquivo indica se tem ajustes
+        sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
+        
+        st.download_button(
+            label="📄 CSV Resumido",
+            data=download_filtrado,
+            file_name=f'calculadora_resumo{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            mime='text/csv',
+            use_container_width=True
+        )
+    
+    # Exibir tabela
+    st.subheader("📋 Resultados da Query SQL")
     
     # Configurar formatação das colunas
     column_config = {
