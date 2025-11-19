@@ -414,23 +414,20 @@ if 'df' in st.session_state:
             """
             result = client.query(query).to_dataframe()
             
-            # DEBUG: Mostrar resultado da query
-            st.sidebar.write(f"DEBUG Query Result: {result.to_dict() if not result.empty else 'EMPTY'}")
-            
             if not result.empty:
                 total = int(result.iloc[0]['total_pendente'])
                 solicitacoes = int(result.iloc[0]['solicitacoes_pendentes'])
                 
-                # DEBUG: Mostrar valores convertidos
-                st.sidebar.write(f"DEBUG Valores: total={total}, solicitacoes={solicitacoes}")
+                # DEBUG: Mostrar valores na sidebar
+                st.sidebar.success(f"✅ Verificação OK: {total} pendente(s), {solicitacoes} solicitação(ões)")
                 
                 return total, solicitacoes
             
-            st.sidebar.write("DEBUG: DataFrame vazio, retornando (0, 0)")
+            # DEBUG: DataFrame vazio
+            st.sidebar.info("ℹ️ Nenhuma alteração pendente encontrada")
             return 0, 0
         except Exception as e:
-            st.sidebar.error(f"⚠️ ERRO na verificação: {str(e)}")
-            st.warning(f"⚠️ Não foi possível verificar alterações pendentes: {e}")
+            st.sidebar.error(f"⚠️ ERRO ao verificar pendentes: {str(e)}")
             return 0, 0
     
     # APLICAR WAIVERS E DESCONTOS APROVADOS do BigQuery
