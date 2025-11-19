@@ -1326,17 +1326,17 @@ elif aba_selecionada == "💰 Waivers":
                 col_periodo1, col_periodo2 = st.columns(2)
                 
                 with col_periodo1:
-                    data_inicio_onda = st.date_input(
+                    data_inicio_fase = st.date_input(
                         f"📅 Data Início:",
                         value=datetime.now().date(),
-                        key=f"data_inicio_onda_{onda_idx}"
+                        key=f"data_inicio_fase_{fase_idx}"
                     )
                 
                 with col_periodo2:
-                    data_fim_onda = st.date_input(
+                    data_fim_fase = st.date_input(
                         f"📅 Data Fim:",
                         value=datetime.now().date(),
-                        key=f"data_fim_onda_{onda_idx}"
+                        key=f"data_fim_fase_{fase_idx}"
                     )
                 
                 col_tipo1, col_tipo2, col_tipo3 = st.columns([3, 3, 2])
@@ -1346,7 +1346,7 @@ elif aba_selecionada == "💰 Waivers":
                         f"💰 Tipo de Waiver:",
                         ["Percentual (%)", "Valor Fixo (R$)"],
                         horizontal=True,
-                        key=f"tipo_valor_onda_{onda_idx}",
+                        key=f"tipo_valor_fase_{fase_idx}",
                         help="• Percentual: desconto sobre a taxa calculada\n• Valor Fixo: valor em reais"
                     )
                     
@@ -1355,10 +1355,10 @@ elif aba_selecionada == "💰 Waivers":
                             f"📊 Percentual de Waiver (%):",
                             min_value=0.0,
                             max_value=100.0,
-                            value=100.0 if onda_idx == 0 else 50.0,
+                            value=100.0 if fase_idx == 0 else 50.0,
                             step=5.0,
                             format="%.1f",
-                            key=f"percentual_onda_{onda_idx}",
+                            key=f"percentual_fase_{fase_idx}",
                             help="Ex: 100% = não cobra nada, 50% = cobra metade, 0% = cobra full"
                         )
                         valor_fixo_waiver = None
@@ -1380,14 +1380,14 @@ elif aba_selecionada == "💰 Waivers":
                     forma_aplicacao = st.selectbox(
                         f"📊 Forma de Aplicação:",
                         ["Provisionado", "Nao_Provisionado"],
-                        key=f"forma_aplicacao_onda_{onda_idx}",
+                        key=f"forma_aplicacao_fase_{fase_idx}",
                         format_func=lambda x: "🔄 Provisionado (Distribuído)" if x == "Provisionado" else "📍 Não Provisionado (Último)",
                         help="• Provisionado: distribui por todos os registros\n• Não Provisionado: aplica no último registro"
                     )
                 
                 with col_tipo3:
-                    dias_onda = (data_fim_onda - data_inicio_onda).days + 1
-                    st.metric("📆 Dias", dias_onda)
+                    dias_fase = (data_fim_fase - data_inicio_fase).days + 1
+                    st.metric("📆 Dias", dias_fase)
                     
                     if tipo_valor_waiver == "Percentual (%)":
                         st.metric("📊 Desconto", f"{percentual_waiver}%")
