@@ -1543,15 +1543,21 @@ elif aba_selecionada == "🎯 Descontos":
                 
                 st.markdown("---")
                 
-                # Tipo de desconto (Total = Fixo, Parcial = Percentual)
+                # Tipo de desconto (3 opções)
                 tipo_desconto_opcao = st.radio(
                     "💰 Tipo de Desconto:",
-                    ["Total (Valor Fixo em R$)", "Parcial (Percentual)"],
+                    ["Valor Fixo (R$)", "Percentual (%)", "Total (Zera taxa)"],
                     horizontal=True,
-                    help="• Total: Valor fixo em reais\n• Parcial: Percentual de desconto sobre a taxa calculada"
+                    help="• Valor Fixo: desconto de valor específico em R$\n• Percentual: desconto parcial (% sobre a taxa)\n• Total: zera completamente a taxa (100% de desconto)"
                 )
                 
-                tipo_desconto = "Fixo" if "Total" in tipo_desconto_opcao else "Percentual"
+                # Determinar tipo_desconto e valores
+                if "Valor Fixo" in tipo_desconto_opcao:
+                    tipo_desconto = "Fixo"
+                elif "Percentual" in tipo_desconto_opcao:
+                    tipo_desconto = "Percentual"
+                else:  # Total
+                    tipo_desconto = "Percentual"
                 
                 col_valor1, col_valor2 = st.columns(2)
                 
@@ -1563,10 +1569,10 @@ elif aba_selecionada == "🎯 Descontos":
                             value=0.0,
                             step=100.0,
                             format="%.2f",
-                            help="Valor fixo em reais que será deduzido"
+                            help="Valor fixo em reais que será deduzido da taxa"
                         )
                         percentual_desconto = None
-                    else:
+                    elif "Percentual" in tipo_desconto_opcao:
                         percentual_desconto = st.number_input(
                             "📊 Percentual de Desconto (%):",
                             min_value=0.0,
@@ -1576,7 +1582,11 @@ elif aba_selecionada == "🎯 Descontos":
                             format="%.2f",
                             help="Percentual que será aplicado sobre a taxa calculada"
                         )
-                        valor_desconto = 0.0  # Será calculado na aplicação
+                        valor_desconto = 0.0
+                    else:  # Total - zera a taxa
+                        percentual_desconto = 100.0
+                        valor_desconto = 0.0
+                        st.info("💯 **Desconto Total**: A taxa será zerada completamente (100% de desconto)")
                 
                 with col_valor2:
                     forma_aplicacao = st.selectbox(
