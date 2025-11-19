@@ -836,19 +836,19 @@ with st.sidebar:
     st.markdown("---")
     
     # Informações úteis
-    st.markdown("### ℹ️ Informações")
+    st.markdown("### ℹ️ Funções")
     st.markdown("""
     **📋 Taxas**
-    - Taxa Mínima: Valor fixo por faixa
-    - Taxa Variável: % sobre PL
+    - Taxa Mínima
+    - Taxa Variável
     
     **💰 Waivers**
-    - Fixo: Valor em R$
-    - Percentual: % de desconto
+    - Fixo
+    - Percentual
     
     **🎯 Descontos**
-    - Jurídico: Ordem judicial
-    - Comercial: Acordo comercial
+    - Jurídico
+    - Comercial
     """)
 
 # =======================
