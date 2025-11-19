@@ -711,13 +711,7 @@ if 'df' in st.session_state:
             st.rerun()
     
     with col4:
-        # Exportar CSV completo (todas as colunas)
-        download_csv = df.to_csv(index=False).encode('utf-8')
-        
-        # Nome do arquivo indica se tem ajustes
-        sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
-        
-        # Bloquear se há alterações pendentes
+        # VALIDAÇÃO DE SEGURANÇA: Bloquear exportação se há alterações pendentes
         if total_pendente > 0:
             st.button(
                 label="📥 CSV Completo",
@@ -727,23 +721,24 @@ if 'df' in st.session_state:
                 help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes} solicitação(ões) pendente(s) de aprovação"
             )
         else:
+            # Gerar CSV apenas se não houver pendências (camada extra de segurança)
+            download_csv = df.to_csv(index=False).encode('utf-8')
+            
+            # Nome do arquivo indica se tem ajustes
+            sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
+            
             st.download_button(
                 label="📥 CSV Completo",
                 data=download_csv,
                 file_name=f'calculadora_taxas{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
                 mime='text/csv',
                 type="primary",
-                use_container_width=True
+                use_container_width=True,
+                help="✅ Exportar todas as colunas com ajustes aplicados"
             )
     
     with col5:
-        # Exportar apenas dados filtrados exibidos na tela (colunas formatadas)
-        download_filtrado = df_exibir.to_csv(index=False).encode('utf-8')
-        
-        # Nome do arquivo indica se tem ajustes
-        sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
-        
-        # Bloquear se há alterações pendentes
+        # VALIDAÇÃO DE SEGURANÇA: Bloquear exportação se há alterações pendentes
         if total_pendente > 0:
             st.button(
                 label="📄 CSV Resumido",
@@ -752,12 +747,19 @@ if 'df' in st.session_state:
                 help=f"⚠️ Exportação bloqueada: {solicitacoes_pendentes} solicitação(ões) pendente(s) de aprovação"
             )
         else:
+            # Gerar CSV apenas se não houver pendências (camada extra de segurança)
+            download_filtrado = df_exibir.to_csv(index=False).encode('utf-8')
+            
+            # Nome do arquivo indica se tem ajustes
+            sufixo = '_com_ajustes' if not ajustes_ativos.empty else ''
+            
             st.download_button(
                 label="📄 CSV Resumido",
                 data=download_filtrado,
                 file_name=f'calculadora_resumo{sufixo}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
                 mime='text/csv',
-                use_container_width=True
+                use_container_width=True,
+                help="✅ Exportar colunas formatadas com ajustes aplicados"
             )
     
     # Exibir tabela
