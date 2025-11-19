@@ -1252,127 +1252,243 @@ elif aba_selecionada == "💰 Waivers":
             return []
     
     # Seção: Criar Novo Waiver
-    st.subheader("➕ Criar Novo Waiver")
+    st.subheader("➕ Criar Novo Waiver em Ondas")
+    
+    st.info("💡 **Waivers em Ondas**: Configure múltiplas fases com percentuais diferentes. Ex: Meses 1-2 = 100% waiver (não cobra), Mês 3-4 = 50% waiver (cobra metade), Mês 5+ = 0% (cobra full)")
     
     # Carregar fundos FORA do formulário
     fundos_disponiveis = carregar_fundos_disponiveis()
     
-    # Seleção de fundos FORA do formulário
-    fundos_selecionados = st.multiselect(
-        "🏢 Selecione os fundos para aplicar o waiver:",
-        fundos_disponiveis,
-        help="Escolha um ou mais fundos",
-        key="fundos_waiver_select"
-    )
+    # Serviços disponíveis
+    SERVICOS_DISPONIVEIS = ["Administração", "Gestão", "Custódia", "Agente Monitoramento", "Performance"]
+    
+    # Seleção de fundos e serviços FORA do formulário
+    col_select1, col_select2 = st.columns(2)
+    
+    with col_select1:
+        fundos_selecionados = st.multiselect(
+            "🏢 Selecione os fundos:",
+            fundos_disponiveis,
+            help="Escolha um ou mais fundos",
+            key="fundos_waiver_select"
+        )
+    
+    with col_select2:
+        servicos_selecionados = st.multiselect(
+            "🔧 Selecione os serviços:",
+            SERVICOS_DISPONIVEIS,
+            help="Deixe vazio para aplicar em TODOS os serviços",
+            key="servicos_waiver_select"
+        )
+    
+    if not servicos_selecionados:
+        st.caption("ℹ️ Waiver será aplicado em **TODOS** os serviços")
+    else:
+        st.caption(f"✅ Waiver será aplicado apenas em: **{', '.join(servicos_selecionados)}**")
     
     if not fundos_selecionados:
         st.info("👆 Selecione pelo menos um fundo para configurar o waiver")
     else:
-        # Mostrar formulário APENAS se houver fundos selecionados
+        # Inicializar número de ondas no session_state
+        if 'num_ondas_waiver' not in st.session_state:
+            st.session_state.num_ondas_waiver = 1
+        
+        # Controles para adicionar/remover ondas FORA do formulário
+        col_onda1, col_onda2, col_onda3 = st.columns([2, 2, 4])
+        
+        with col_onda1:
+            if st.button("➕ Adicionar Onda", use_container_width=True):
+                st.session_state.num_ondas_waiver += 1
+                st.rerun()
+        
+        with col_onda2:
+            if st.button("➖ Remover Onda", use_container_width=True, disabled=st.session_state.num_ondas_waiver <= 1):
+                if st.session_state.num_ondas_waiver > 1:
+                    st.session_state.num_ondas_waiver -= 1
+                    st.rerun()
+        
+        with col_onda3:
+            st.info(f"🌊 **{st.session_state.num_ondas_waiver} onda(s)** configurada(s)")
+        
+        # Mostrar formulário
         with st.form("form_criar_waiver"):
-            st.markdown("### 📝 Configure o waiver para os fundos selecionados")
-            st.info(f"✅ {len(fundos_selecionados)} fundo(s) selecionado(s). O waiver será submetido para aprovação.")
+            st.markdown("### 📝 Configure as ondas de waiver")
+            st.info(f"✅ {len(fundos_selecionados)} fundo(s) × {st.session_state.num_ondas_waiver} onda(s) = **{len(fundos_selecionados) * st.session_state.num_ondas_waiver * (len(servicos_selecionados) if servicos_selecionados else 1)} waiver(s)** serão criados")
             
             st.markdown("---")
-            st.markdown("### 💰 Valor e Tipo para cada fundo")
-            st.caption("Para cada fundo selecionado, defina o valor do waiver e se será provisionado ou não.")
             
-            waivers_data = []
+            # Configurar cada onda
+            ondas_config = []
             
-            for idx, fundo in enumerate(fundos_selecionados, 1):
-                st.markdown(f"#### {idx}. {fundo}")
-                col1, col2, col3 = st.columns([3, 3, 2])
+            for onda_idx in range(st.session_state.num_ondas_waiver):
+                st.markdown(f"### 🌊 Onda {onda_idx + 1}")
                 
-                with col1:
-                    valor_waiver = st.number_input(
-                        f"💵 Valor do Waiver (R$)",
-                        min_value=0.0,
-                        value=0.0,
-                        step=100.0,
-                        format="%.2f",
-                        key=f"valor_waiver_{fundo}",
-                        help="Valor em reais que será descontado da provisão"
+                col_periodo1, col_periodo2 = st.columns(2)
+                
+                with col_periodo1:
+                    data_inicio_onda = st.date_input(
+                        f"📅 Data Início:",
+                        value=datetime.now().date(),
+                        key=f"data_inicio_onda_{onda_idx}"
                     )
                 
-                with col2:
-                    tipo_waiver = st.selectbox(
-                        f"📊 Tipo de Aplicação",
-                        ["Provisionado", "Não Provisionado"],
-                        key=f"tipo_waiver_{fundo}",
-                        help="• Provisionado: distribui o valor proporcionalmente por todos os registros do período\n• Não Provisionado: aplica o valor total no último registro do período"
+                with col_periodo2:
+                    data_fim_onda = st.date_input(
+                        f"📅 Data Fim:",
+                        value=datetime.now().date(),
+                        key=f"data_fim_onda_{onda_idx}"
                     )
                 
-                with col3:
-                    st.metric("💰 Total", f"R$ {valor_waiver:,.2f}")
-                    if valor_waiver > 0:
-                        if tipo_waiver == "Provisionado":
-                            st.caption("🔄 Distribuído")
-                        else:
-                            st.caption("📍 Último registro")
+                col_tipo1, col_tipo2, col_tipo3 = st.columns([3, 3, 2])
                 
-                waivers_data.append({
-                    "fund_name": fundo,
-                    "valor_waiver": valor_waiver,
-                    "tipo_waiver": tipo_waiver
+                with col_tipo1:
+                    tipo_valor_waiver = st.radio(
+                        f"💰 Tipo de Waiver:",
+                        ["Percentual (%)", "Valor Fixo (R$)"],
+                        horizontal=True,
+                        key=f"tipo_valor_onda_{onda_idx}",
+                        help="• Percentual: desconto sobre a taxa calculada\n• Valor Fixo: valor em reais"
+                    )
+                    
+                    if tipo_valor_waiver == "Percentual (%)":
+                        percentual_waiver = st.number_input(
+                            f"📊 Percentual de Waiver (%):",
+                            min_value=0.0,
+                            max_value=100.0,
+                            value=100.0 if onda_idx == 0 else 50.0,
+                            step=5.0,
+                            format="%.1f",
+                            key=f"percentual_onda_{onda_idx}",
+                            help="Ex: 100% = não cobra nada, 50% = cobra metade, 0% = cobra full"
+                        )
+                        valor_fixo_waiver = None
+                        tipo_desconto_onda = "Percentual"
+                    else:
+                        valor_fixo_waiver = st.number_input(
+                            f"💵 Valor Fixo (R$):",
+                            min_value=0.0,
+                            value=0.0,
+                            step=100.0,
+                            format="%.2f",
+                            key=f"valor_fixo_onda_{onda_idx}",
+                            help="Valor em reais que será descontado"
+                        )
+                        percentual_waiver = None
+                        tipo_desconto_onda = "Fixo"
+                
+                with col_tipo2:
+                    forma_aplicacao = st.selectbox(
+                        f"📊 Forma de Aplicação:",
+                        ["Provisionado", "Nao_Provisionado"],
+                        key=f"forma_aplicacao_onda_{onda_idx}",
+                        format_func=lambda x: "🔄 Provisionado (Distribuído)" if x == "Provisionado" else "📍 Não Provisionado (Último)",
+                        help="• Provisionado: distribui por todos os registros\n• Não Provisionado: aplica no último registro"
+                    )
+                
+                with col_tipo3:
+                    dias_onda = (data_fim_onda - data_inicio_onda).days + 1
+                    st.metric("📆 Dias", dias_onda)
+                    
+                    if tipo_valor_waiver == "Percentual (%)":
+                        st.metric("📊 Desconto", f"{percentual_waiver}%")
+                    else:
+                        st.metric("💰 Valor", f"R$ {valor_fixo_waiver:,.2f}")
+                
+                ondas_config.append({
+                    "data_inicio": data_inicio_onda,
+                    "data_fim": data_fim_onda,
+                    "tipo_desconto": tipo_desconto_onda,
+                    "percentual_waiver": percentual_waiver,
+                    "valor_fixo_waiver": valor_fixo_waiver,
+                    "forma_aplicacao": forma_aplicacao
                 })
                 
                 st.divider()
             
-            # Datas do período
-            st.markdown("### 📅 Período de Aplicação")
-            col_data1, col_data2 = st.columns(2)
-            
-            with col_data1:
-                data_inicio_waiver = st.date_input(
-                    "Data Início:",
-                    value=datetime.now().date(),
-                    key="data_inicio_waiver"
-                )
-            
-            with col_data2:
-                data_fim_waiver = st.date_input(
-                    "Data Fim:",
-                    value=datetime.now().date(),
-                    key="data_fim_waiver"
-                )
-            
-            # Observação
+            # Observação geral
             observacao_waiver = st.text_area(
-                "Observação (opcional):",
-                placeholder="Digite informações adicionais sobre este waiver...",
-                key="obs_waiver"
+                "📝 Observação (opcional):",
+                placeholder="Ex: Waiver progressivo - redução gradual em 3 fases...",
+                key="obs_waiver_ondas"
             )
             
-            submitted_waiver = st.form_submit_button("➕ Criar Waiver", use_container_width=True, type="primary")
+            submitted_waiver = st.form_submit_button("➕ Criar Waivers em Ondas", use_container_width=True, type="primary")
             
             if submitted_waiver:
-                if any(w['valor_waiver'] <= 0 for w in waivers_data):
-                    st.error("❌ Todos os valores devem ser maiores que zero!")
-                else:
-                    # Salvar cada waiver como alteração pendente com mesmo solicitacao_id
-                    usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
-                    solicitacao_id = str(uuid.uuid4())  # Mesmo ID para agrupar todos os waivers
-                    sucesso = True
+                # Validações
+                erros = []
+                
+                for idx, onda in enumerate(ondas_config, 1):
+                    if onda['tipo_desconto'] == "Percentual" and (onda['percentual_waiver'] is None or onda['percentual_waiver'] < 0):
+                        erros.append(f"❌ Onda {idx}: Percentual inválido")
                     
-                    for waiver in waivers_data:
-                        if waiver['valor_waiver'] > 0:
-                            dados_waiver = {
-                                "fund_name": waiver['fund_name'],
-                                "valor_waiver": waiver['valor_waiver'],
-                                "tipo_waiver": waiver['tipo_waiver'],
-                                "data_inicio": data_inicio_waiver.strftime('%Y-%m-%d'),
-                                "data_fim": data_fim_waiver.strftime('%Y-%m-%d'),
-                                "observacao": observacao_waiver or "Criado via Dashboard"
-                            }
+                    if onda['tipo_desconto'] == "Fixo" and (onda['valor_fixo_waiver'] is None or onda['valor_fixo_waiver'] <= 0):
+                        erros.append(f"❌ Onda {idx}: Valor fixo deve ser maior que zero")
+                    
+                    if onda['data_fim'] < onda['data_inicio']:
+                        erros.append(f"❌ Onda {idx}: Data fim anterior à data início")
+                
+                # Verificar sobreposição de períodos
+                for i, onda1 in enumerate(ondas_config):
+                    for j, onda2 in enumerate(ondas_config):
+                        if i < j:
+                            # Verifica se há sobreposição
+                            if not (onda1['data_fim'] < onda2['data_inicio'] or onda2['data_fim'] < onda1['data_inicio']):
+                                erros.append(f"⚠️ Atenção: Onda {i+1} e Onda {j+1} têm períodos sobrepostos")
+                
+                if erros:
+                    for erro in erros:
+                        st.warning(erro) if "Atenção" in erro else st.error(erro)
+                else:
+                    # Criar waivers para cada combinação: fundo × onda × serviço
+                    usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                    solicitacao_id = str(uuid.uuid4())  # Mesmo ID para agrupar todos
+                    sucesso = True
+                    total_waivers = 0
+                    
+                    servicos_para_criar = servicos_selecionados if servicos_selecionados else [None]
+                    
+                    for fundo in fundos_selecionados:
+                        for servico in servicos_para_criar:
+                            for idx, onda in enumerate(ondas_config, 1):
+                                # Calcular valor_desconto baseado no tipo
+                                if onda['tipo_desconto'] == "Percentual":
+                                    valor_desconto = 0.0  # Será calculado na aplicação
+                                    percentual_desconto = onda['percentual_waiver']
+                                else:
+                                    valor_desconto = onda['valor_fixo_waiver']
+                                    percentual_desconto = None
+                                
+                                dados_waiver = {
+                                    "fund_name": fundo,
+                                    "valor_waiver": valor_desconto,
+                                    "tipo_waiver": onda['forma_aplicacao'],
+                                    "data_inicio": onda['data_inicio'].strftime('%Y-%m-%d'),
+                                    "data_fim": onda['data_fim'].strftime('%Y-%m-%d'),
+                                    "servico": servico,
+                                    "tipo_desconto": onda['tipo_desconto'],
+                                    "percentual_desconto": percentual_desconto,
+                                    "observacao": f"{observacao_waiver or 'Waiver em ondas'} - Onda {idx}/{len(ondas_config)}"
+                                }
+                                
+                                resultado, _ = salvar_alteracao_pendente("INSERT", "waiver", dados_waiver, usuario_atual, solicitacao_id)
+                                if resultado:
+                                    total_waivers += 1
+                                else:
+                                    sucesso = False
+                                    break
                             
-                            resultado, _ = salvar_alteracao_pendente("INSERT", "waiver", dados_waiver, usuario_atual, solicitacao_id)
-                            if not resultado:
-                                sucesso = False
+                            if not sucesso:
                                 break
+                        
+                        if not sucesso:
+                            break
                     
                     if sucesso:
-                        st.success(f"✅ {len([w for w in waivers_data if w['valor_waiver'] > 0])} waiver(s) criado(s) e enviado(s) para aprovação!")
+                        st.success(f"✅ {total_waivers} waiver(s) criado(s) em {len(ondas_config)} onda(s) e enviados para aprovação!")
                         st.info("⏳ Aguardando aprovação de um aprovador")
+                        # Resetar número de ondas
+                        st.session_state.num_ondas_waiver = 1
                         st.rerun()
                     else:
                         st.error("❌ Erro ao salvar um ou mais waivers")
@@ -1834,6 +1950,12 @@ if solicitacoes_filtradas:
                                     # tipo_waiver vem como 'Provisionado' ou 'Nao_Provisionado'
                                     forma_aplicacao = dados['tipo_waiver']
                                     
+                                    # Verificar se tem tipo_desconto (waivers novos) ou usar padrão (waivers antigos)
+                                    tipo_desconto = dados.get('tipo_desconto', 'Fixo')
+                                    percentual_desconto = dados.get('percentual_desconto')
+                                    valor_desconto = dados.get('valor_waiver', 0.0)
+                                    servico = dados.get('servico')
+                                    
                                     sql = f"""
                                     INSERT INTO `kanastra-live.finance.descontos` 
                                     (id, data_aplicacao, usuario, fund_id, fund_name, categoria,
@@ -1846,14 +1968,14 @@ if solicitacoes_filtradas:
                                         NULL,
                                         '{dados['fund_name']}',
                                         'waiver',
-                                        {dados['valor_waiver']},
-                                        'Fixo',
-                                        NULL,
+                                        {valor_desconto},
+                                        '{tipo_desconto}',
+                                        {percentual_desconto if percentual_desconto is not None else 'NULL'},
                                         '{forma_aplicacao}',
                                         NULL,
                                         DATE('{dados['data_inicio']}'),
                                         DATE('{dados['data_fim']}'),
-                                        NULL,
+                                        {f"'{servico}'" if servico else 'NULL'},
                                         '{dados.get('observacao', 'Aprovado via Dashboard')}',
                                         NULL
                                     )
