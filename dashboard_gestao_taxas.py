@@ -208,7 +208,7 @@ def carregar_dados_bigquery(tabela):
         return None
 
 # Funções para persistência de alterações pendentes
-def salvar_alteracao_pendente(tipo_alteracao, tabela, dados, usuario="usuario_kanastra"):
+def salvar_alteracao_pendente(tipo_alteracao, tabela, dados, usuario="usuario_kanastra", solicitacao_id=None):
     """Salva uma alteração pendente no BigQuery"""
     client = get_bigquery_client()
     if client is None:
@@ -219,12 +219,16 @@ def salvar_alteracao_pendente(tipo_alteracao, tabela, dados, usuario="usuario_ka
         alteracao_id = str(uuid.uuid4())
         timestamp_now = datetime.now().isoformat()
         
+        # Se não foi passado um solicitacao_id, criar um novo (para agrupar linhas relacionadas)
+        if solicitacao_id is None:
+            solicitacao_id = str(uuid.uuid4())
+        
         # Converter dados para JSON string
         dados_json = json.dumps(dados, ensure_ascii=False)
         
         query = f"""
         INSERT INTO `kanastra-live.finance.alteracoes_pendentes` 
-        (id, usuario, timestamp, tipo_alteracao, tabela, dados, status)
+        (id, usuario, timestamp, tipo_alteracao, tabela, dados, status, solicitacao_id)
         VALUES (
             '{alteracao_id}',
             '{usuario}',
@@ -232,18 +236,19 @@ def salvar_alteracao_pendente(tipo_alteracao, tabela, dados, usuario="usuario_ka
             '{tipo_alteracao}',
             '{tabela}',
             JSON '{dados_json}',
-            'PENDENTE'
+            'PENDENTE',
+            '{solicitacao_id}'
         )
         """
         
         client.query(query).result()
-        return True
+        return True, solicitacao_id
     except Exception as e:
         st.error(f"❌ Erro ao salvar alteração: {e}")
-        return False
+        return False, None
 
 def carregar_alteracoes_pendentes():
-    """Carrega todas as alterações pendentes do BigQuery"""
+    """Carrega todas as alterações pendentes do BigQuery agrupadas por solicitacao_id"""
     client = get_bigquery_client()
     if client is None:
         return []
@@ -257,17 +262,20 @@ def carregar_alteracoes_pendentes():
             tipo_alteracao,
             tabela,
             dados,
-            status
+            status,
+            solicitacao_id
         FROM `kanastra-live.finance.alteracoes_pendentes`
         WHERE status = 'PENDENTE'
-        ORDER BY timestamp ASC
+        ORDER BY timestamp ASC, solicitacao_id
         """
         
         df = client.query(query).to_dataframe()
         
-        # Converter para lista de dicionários
-        alteracoes = []
+        # Agrupar alterações por solicitacao_id
+        solicitacoes = {}
         for _, row in df.iterrows():
+            solicitacao_id = row.get('solicitacao_id', row['id'])  # Fallback para id se não tiver solicitacao_id
+            
             alteracao = {
                 'id': row['id'],
                 'usuario': row['usuario'],
@@ -275,11 +283,16 @@ def carregar_alteracoes_pendentes():
                 'tipo_alteracao': row['tipo_alteracao'],
                 'tabela': row['tabela'],
                 'dados': json.loads(row['dados']),
-                'status': row['status']
+                'status': row['status'],
+                'solicitacao_id': solicitacao_id
             }
-            alteracoes.append(alteracao)
+            
+            if solicitacao_id not in solicitacoes:
+                solicitacoes[solicitacao_id] = []
+            solicitacoes[solicitacao_id].append(alteracao)
         
-        return alteracoes
+        # Retornar lista de solicitações agrupadas
+        return list(solicitacoes.values())
     except Exception as e:
         st.error(f"❌ Erro ao carregar alterações pendentes: {e}")
         return []
@@ -518,10 +531,22 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                 st.markdown("### 📝 Preencha os dados da nova taxa")
                 st.info("ℹ️ A taxa mínima será aplicada independente do PL. Serão criadas automaticamente 2 linhas (faixa 0 e faixa máxima).")
                 
+                # Carregar fundos do BigQuery
+                df_fundos = carregar_fundos_completos()
+                
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    fund_id = st.number_input("Fund ID", min_value=1, step=1)
+                    # Criar lista de opções com nome do fundo e ID
+                    opcoes_fundos = [f"{row['fund_name']} (ID: {row['fund_id']})" for _, row in df_fundos.iterrows()]
+                    fundo_selecionado = st.selectbox(
+                        "Selecione o Fundo",
+                        options=opcoes_fundos
+                    )
+                    # Extrair fund_id da seleção
+                    idx_selecionado = opcoes_fundos.index(fundo_selecionado)
+                    fund_id = int(df_fundos.iloc[idx_selecionado]['fund_id'])
+                    cnpj = df_fundos.iloc[idx_selecionado]['cnpj']
                 
                 with col2:
                     cliente = st.text_input("Cliente")
@@ -558,15 +583,16 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                 
                     # Salvar no BigQuery (com usuário logado)
                     usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
-                    if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_0, usuario_atual):
-                        if salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_max, usuario_atual):
-                            st.success(f"✅ Taxa mínima criada! Cliente: {cliente} - {servico} - 2 linhas adicionadas (faixa 0 e máxima)")
-                            st.info("⏳ Aguardando aprovação de um aprovador")
-                            st.rerun()
-                        else:
-                            st.error("❌ Erro ao salvar segunda linha")
+                    solicitacao_id = str(uuid.uuid4())  # Mesmo ID para agrupar as 2 linhas
+                    sucesso_1, _ = salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_0, usuario_atual, solicitacao_id)
+                    sucesso_2, _ = salvar_alteracao_pendente("INSERT", "fee_minimo", taxa_faixa_max, usuario_atual, solicitacao_id)
+                    
+                    if sucesso_1 and sucesso_2:
+                        st.success(f"✅ Taxa mínima criada! Cliente: {cliente} - {servico} - 2 linhas adicionadas (faixa 0 e máxima)")
+                        st.info("⏳ Aguardando aprovação de um aprovador")
+                        st.rerun()
                     else:
-                        st.error("❌ Erro ao salvar primeira linha")
+                        st.error("❌ Erro ao salvar taxa mínima")
     
     
         # FORMULÁRIO 2: Taxa Mínima + Editar
@@ -618,7 +644,8 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                     
                         # Salvar no BigQuery (com usuário logado)
                         usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
-                        if salvar_alteracao_pendente("UPDATE", "fee_minimo", taxa_editada, usuario_atual):
+                        sucesso, _ = salvar_alteracao_pendente("UPDATE", "fee_minimo", taxa_editada, usuario_atual)
+                        if sucesso:
                             st.success(f"✅ Fee mínimo atualizado! Cliente: {cliente_edit} - {servico_edit} - Novo valor: R$ {novo_fee_min:,.2f}")
                             st.info("⏳ Aguardando aprovação de um aprovador")
                             st.rerun()
@@ -637,11 +664,24 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
         
             with st.form("form_criar_taxa_variavel"):
                 st.markdown("### 📝 Informações básicas")
+                
+                # Carregar fundos do BigQuery
+                df_fundos_var = carregar_fundos_completos()
             
                 col1, col2, col3 = st.columns(3)
             
                 with col1:
-                    fund_id_var = st.number_input("Fund ID", min_value=1, step=1, key="var_fund_id")
+                    # Criar lista de opções com nome do fundo e ID
+                    opcoes_fundos_var = [f"{row['fund_name']} (ID: {row['fund_id']})" for _, row in df_fundos_var.iterrows()]
+                    fundo_selecionado_var = st.selectbox(
+                        "Selecione o Fundo",
+                        options=opcoes_fundos_var,
+                        key="var_fund_select"
+                    )
+                    # Extrair fund_id da seleção
+                    idx_selecionado_var = opcoes_fundos_var.index(fundo_selecionado_var)
+                    fund_id_var = int(df_fundos_var.iloc[idx_selecionado_var]['fund_id'])
+                    cnpj_var = df_fundos_var.iloc[idx_selecionado_var]['cnpj']
             
                 with col2:
                     cliente_var = st.text_input("Cliente", key="var_cliente")
@@ -693,8 +733,9 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                 submitted_var = st.form_submit_button("➕ Criar Taxas Variáveis", use_container_width=True, type="primary")
             
                 if submitted_var:
-                    # Criar uma linha para cada faixa
+                    # Criar uma linha para cada faixa com mesmo solicitacao_id
                     usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                    solicitacao_id = str(uuid.uuid4())  # Mesmo ID para agrupar todas as faixas
                     sucesso = True
                 
                     for faixa in faixas_data:
@@ -707,7 +748,8 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                             "fee_variavel": faixa["fee_variavel"]
                         }
                     
-                        if not salvar_alteracao_pendente("INSERT", "fee_variavel", nova_taxa, usuario_atual):
+                        resultado, _ = salvar_alteracao_pendente("INSERT", "fee_variavel", nova_taxa, usuario_atual, solicitacao_id)
+                        if not resultado:
                             sucesso = False
                             break
                 
@@ -817,12 +859,14 @@ if aba_selecionada == "📋 Criação/Alteração de Taxas - Regulamento":
                         cancelar_update = st.form_submit_button("❌ Cancelar", use_container_width=True)
                 
                     if submitted_update:
-                        # Salvar todas as faixas editadas no BigQuery
+                        # Salvar todas as faixas editadas no BigQuery com mesmo solicitacao_id
                         sucesso = True
                         usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                        solicitacao_id = str(uuid.uuid4())  # Mesmo ID para agrupar todas as edições
                     
                         for faixa_edit in faixas_editadas:
-                            if not salvar_alteracao_pendente("UPDATE", "fee_variavel", faixa_edit, usuario_atual):
+                            resultado, _ = salvar_alteracao_pendente("UPDATE", "fee_variavel", faixa_edit, usuario_atual, solicitacao_id)
+                            if not resultado:
                                 sucesso = False
                                 break
                     
@@ -901,7 +945,7 @@ elif aba_selecionada == "💰 Waivers":
     # Carregar lista de fundos do BigQuery
     @st.cache_data(ttl=3600)
     def carregar_fundos_disponiveis():
-        """Carrega lista de fundos disponíveis"""
+        """Carrega lista de fundos disponíveis - apenas nomes"""
         try:
             client = get_bigquery_client()
             query = """
@@ -915,6 +959,27 @@ elif aba_selecionada == "💰 Waivers":
         except Exception as e:
             st.error(f"❌ Erro ao carregar fundos: {e}")
             return []
+    
+    @st.cache_data(ttl=3600)
+    def carregar_fundos_completos():
+        """Carrega lista de fundos com ID, nome e CNPJ para criação de taxas"""
+        try:
+            client = get_bigquery_client()
+            query = """
+            SELECT 
+                id as fund_id,
+                name as fund_name,
+                government_id as cnpj
+            FROM `kanastra-live.hub.funds` 
+            WHERE name IS NOT NULL 
+            ORDER BY name
+            """
+            df = client.query(query).to_dataframe()
+            return df
+        except Exception as e:
+            st.error(f"❌ Erro ao carregar fundos completos: {e}")
+            return pd.DataFrame()
+
     
     # Seção: Criar Novo Waiver
     st.subheader("➕ Criar Novo Waiver")
@@ -1014,8 +1079,9 @@ elif aba_selecionada == "💰 Waivers":
                 if any(w['valor_waiver'] <= 0 for w in waivers_data):
                     st.error("❌ Todos os valores devem ser maiores que zero!")
                 else:
-                    # Salvar cada waiver como alteração pendente
+                    # Salvar cada waiver como alteração pendente com mesmo solicitacao_id
                     usuario_atual = st.session_state.get('usuario_logado', 'usuario_kanastra')
+                    solicitacao_id = str(uuid.uuid4())  # Mesmo ID para agrupar todos os waivers
                     sucesso = True
                     
                     for waiver in waivers_data:
@@ -1029,7 +1095,8 @@ elif aba_selecionada == "💰 Waivers":
                                 "observacao": observacao_waiver or "Criado via Dashboard"
                             }
                             
-                            if not salvar_alteracao_pendente("INSERT", "waiver", dados_waiver, usuario_atual):
+                            resultado, _ = salvar_alteracao_pendente("INSERT", "waiver", dados_waiver, usuario_atual, solicitacao_id)
+                            if not resultado:
                                 sucesso = False
                                 break
                     
@@ -1171,183 +1238,222 @@ if perfil == "aprovador":
 else:
     st.subheader("📊 Suas Alterações Pendentes")
 
-# Carregar alterações pendentes do BigQuery
-alteracoes_pendentes = carregar_alteracoes_pendentes()
+# Carregar alterações pendentes do BigQuery (agrupadas por solicitacao_id)
+solicitacoes_pendentes = carregar_alteracoes_pendentes()
 
-# Filtrar alterações conforme perfil
+# Filtrar solicitações conforme perfil
 if perfil == "editor":
-    # Editores veem apenas suas próprias alterações
-    alteracoes_filtradas = [a for a in alteracoes_pendentes if a.get('usuario') == st.session_state.usuario_logado]
+    # Editores veem apenas suas próprias solicitações
+    solicitacoes_filtradas = [s for s in solicitacoes_pendentes if s[0].get('usuario') == st.session_state.usuario_logado]
 else:
-    # Aprovadores veem todas as alterações
-    alteracoes_filtradas = alteracoes_pendentes
+    # Aprovadores veem todas as solicitações
+    solicitacoes_filtradas = solicitacoes_pendentes
 
-if alteracoes_filtradas:
+if solicitacoes_filtradas:
     st.markdown("---")
     
-    if perfil == "aprovador":
-        st.subheader(f"⏳ Todas as Alterações Pendentes ({len(alteracoes_filtradas)})")
-    else:
-        st.subheader(f"⏳ Suas Alterações Pendentes ({len(alteracoes_filtradas)})")
+    total_solicitacoes = len(solicitacoes_filtradas)
+    total_linhas = sum(len(s) for s in solicitacoes_filtradas)
     
-    # Processar cada alteração individualmente
-    for idx, alteracao in enumerate(alteracoes_filtradas):
-        usuario_alteracao = alteracao.get('usuario', 'N/A')
+    if perfil == "aprovador":
+        st.subheader(f"⏳ Solicitações Pendentes: {total_solicitacoes} ({total_linhas} linhas)")
+    else:
+        st.subheader(f"⏳ Suas Solicitações Pendentes: {total_solicitacoes} ({total_linhas} linhas)")
+    
+    # Processar cada solicitação (grupo de alterações)
+    for idx, solicitacao in enumerate(solicitacoes_filtradas):
+        # Primeira linha da solicitação tem os dados gerais
+        primeira_linha = solicitacao[0]
+        usuario_alteracao = primeira_linha.get('usuario', 'N/A')
+        timestamp = primeira_linha['timestamp']
+        tipo_alteracao = primeira_linha['tipo_alteracao']
+        tabela = primeira_linha['tabela']
         
-        # Cor de fundo diferente se for alteração de outro usuário (para aprovadores)
+        # Cor de fundo diferente se for solicitação de outro usuário (para aprovadores)
         if perfil == "aprovador" and usuario_alteracao != st.session_state.usuario_logado:
             st.markdown(f"""
-            <div style='background-color: #fffbea; padding: 10px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 10px;'>
-                <strong>📝 Alteração #{idx + 1}</strong> - <em>Por: {usuario_alteracao}</em>
+            <div style='background-color: #fffbea; padding: 15px; border-radius: 8px; border-left: 4px solid #f59e0b; margin-bottom: 15px;'>
+                <strong>📦 Solicitação #{idx + 1}</strong> - <em>Por: {usuario_alteracao}</em> - <em>{len(solicitacao)} linha(s)</em>
             </div>
             """, unsafe_allow_html=True)
         else:
-            st.markdown(f"### 📝 Alteração #{idx + 1}")
+            st.markdown(f"### 📦 Solicitação #{idx + 1} - {len(solicitacao)} linha(s)")
         
-        # Pegar dados do campo JSON
-        dados = alteracao['dados']
-        
-        # Exibir informações
+        # Exibir informações gerais da solicitação
         col_info1, col_info2, col_info3, col_info4 = st.columns(4)
         with col_info1:
-            st.info(f"**Tipo:** {alteracao['tipo_alteracao']}")
+            st.info(f"**Tipo:** {tipo_alteracao}")
         with col_info2:
-            st.info(f"**Hora:** {alteracao['timestamp'].strftime('%H:%M:%S')}")
+            st.info(f"**Data/Hora:** {timestamp.strftime('%d/%m/%Y %H:%M')}")
         with col_info3:
-            st.info(f"**Tabela:** {alteracao['tabela']}")
+            st.info(f"**Tabela:** {tabela}")
         with col_info4:
-            st.info(f"**Por:** {usuario_alteracao}")
+            st.info(f"**Linhas:** {len(solicitacao)}")
         
-        # Mostrar dados da alteração como tabela
-        df_alteracao = pd.DataFrame([dados])
-        st.dataframe(df_alteracao, use_container_width=True, hide_index=True)
+        # Mostrar todas as linhas da solicitação como tabela expandida
+        with st.expander(f"📋 Ver {len(solicitacao)} linha(s) desta solicitação", expanded=True):
+            # Criar DataFrame com todas as linhas
+            dados_todas_linhas = [alteracao['dados'] for alteracao in solicitacao]
+            df_solicitacao = pd.DataFrame(dados_todas_linhas)
+            st.dataframe(df_solicitacao, use_container_width=True, hide_index=True)
         
-        # Botões de aprovação individual (APENAS PARA APROVADORES)
+        # Botões de aprovação/rejeição EM BLOCO (APENAS PARA APROVADORES)
         if perfil == "aprovador":
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
-                if st.button(f"✅ Aprovar #{idx + 1}", key=f"aprovar_{idx}", use_container_width=True, type="primary"):
-                    # Executar INSERT ou UPDATE no BigQuery
+                if st.button(f"✅ Aprovar Solicitação Completa", key=f"aprovar_solicitacao_{idx}", use_container_width=True, type="primary"):
+                    # Executar todas as alterações da solicitação
                     try:
                         client = get_bigquery_client()
-                        tabela = alteracao['tabela']
-                        dados = alteracao['dados']
+                        erros = []
+                        queries_executadas = []
                         
-                        # WAIVER - Lógica especial
-                        if tabela == "waiver":
-                            waiver_id = str(uuid.uuid4())
-                            data_aplicacao = datetime.now().isoformat()
-                            usuario_criador = alteracao.get('usuario', 'usuario_kanastra')
+                        # Processar cada linha da solicitação
+                        for alteracao in solicitacao:
+                            tabela_alt = alteracao['tabela']
+                            dados = alteracao['dados']
+                            tipo_alt = alteracao['tipo_alteracao']
                             
-                            sql = f"""
-                            INSERT INTO `kanastra-live.finance.historico_waivers` 
-                            (id, data_aplicacao, usuario, fund_name, valor_waiver, tipo_waiver, data_inicio, data_fim, observacao)
-                            VALUES (
-                                '{waiver_id}',
-                                TIMESTAMP('{data_aplicacao}'),
-                                '{usuario_criador}',
-                                '{dados['fund_name']}',
-                                {dados['valor_waiver']},
-                                '{dados['tipo_waiver']}',
-                                DATE('{dados['data_inicio']}'),
-                                DATE('{dados['data_fim']}'),
-                                '{dados.get('observacao', 'Aprovado via Dashboard')}'
-                            )
-                            """
+                            try:
+                                # WAIVER - Lógica especial
+                                if tabela_alt == "waiver":
+                                    waiver_id = str(uuid.uuid4())
+                                    data_aplicacao = datetime.now().isoformat()
+                                    usuario_criador = alteracao.get('usuario', 'usuario_kanastra')
+                                    
+                                    sql = f"""
+                                    INSERT INTO `kanastra-live.finance.historico_waivers` 
+                                    (id, data_aplicacao, usuario, fund_name, valor_waiver, tipo_waiver, data_inicio, data_fim, observacao)
+                                    VALUES (
+                                        '{waiver_id}',
+                                        TIMESTAMP('{data_aplicacao}'),
+                                        '{usuario_criador}',
+                                        '{dados['fund_name']}',
+                                        {dados['valor_waiver']},
+                                        '{dados['tipo_waiver']}',
+                                        DATE('{dados['data_inicio']}'),
+                                        DATE('{dados['data_fim']}'),
+                                        '{dados.get('observacao', 'Aprovado via Dashboard')}'
+                                    )
+                                    """
+                                
+                                elif tipo_alt == "INSERT":
+                                    # Gerar SQL INSERT para taxas
+                                    colunas = [k for k in dados.keys()]
+                                    valores = []
+                                    for k in colunas:
+                                        v = dados[k]
+                                        if v is None:
+                                            valores.append("NULL")
+                                        elif isinstance(v, str):
+                                            valores.append(f"'{v}'")
+                                        elif isinstance(v, (int, float)):
+                                            valores.append(str(v))
+                                        else:
+                                            valores.append(f"'{str(v)}'")
+                                    
+                                    # Mapear fund_id para `fund id` com backticks
+                                    colunas_sql = [f"`fund id`" if c == "fund_id" else c for c in colunas]
+                                    
+                                    sql = f"""
+                                    INSERT INTO `kanastra-live.finance.{tabela_alt}` 
+                                    ({', '.join(colunas_sql)})
+                                    VALUES ({', '.join(valores)})
+                                    """
+                                    
+                                else:  # UPDATE para taxas
+                                    # Gerar SQL UPDATE
+                                    set_clause = []
+                                    for k, v in dados.items():
+                                        if k not in ['fund_id', 'cliente', 'servico', 'empresa', 'original_faixa', 'original_lower']:
+                                            if v is None:
+                                                set_clause.append(f"{k} = NULL")
+                                            elif isinstance(v, str):
+                                                set_clause.append(f"{k} = '{v}'")
+                                            elif isinstance(v, (int, float)):
+                                                set_clause.append(f"{k} = {v}")
+                                            else:
+                                                set_clause.append(f"{k} = '{str(v)}'")
+                                    
+                                    # WHERE clause baseado na tabela
+                                    if tabela_alt == "fee_minimo":
+                                        where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}' AND faixa = {dados.get('original_lower', dados['faixa'])}"
+                                    else:  # fee_variavel
+                                        original_faixa = dados.get('original_faixa', dados.get('original_lower', dados['faixa']))
+                                        where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}' AND faixa = {original_faixa}"
+                                    
+                                    sql = f"""
+                                    UPDATE `kanastra-live.finance.{tabela_alt}`
+                                    SET {', '.join(set_clause)}
+                                    WHERE {where}
+                                    """
+                                
+                                # Executar query
+                                queries_executadas.append(sql)
+                                query_job = client.query(sql)
+                                query_job.result()
+                                
+                            except Exception as e:
+                                erros.append(f"Erro em uma das linhas: {str(e)}")
                         
-                        elif alteracao['tipo_alteracao'] == "INSERT":
-                            # Gerar SQL INSERT para taxas
-                            colunas = [k for k in dados.keys()]
-                            valores = []
-                            for k in colunas:
-                                v = dados[k]
-                                if v is None:
-                                    valores.append("NULL")
-                                elif isinstance(v, str):
-                                    valores.append(f"'{v}'")
-                                elif isinstance(v, (int, float)):
-                                    valores.append(str(v))
-                                else:
-                                    valores.append(f"'{str(v)}'")
+                        # Se todas as queries foram executadas com sucesso
+                        if not erros:
+                            # Mostrar queries executadas
+                            with st.expander("📜 Ver SQL executado"):
+                                for q in queries_executadas:
+                                    st.code(q, language="sql")
                             
-                            # Mapear fund_id para `fund id` com backticks
-                            colunas_sql = [f"`fund id`" if c == "fund_id" else c for c in colunas]
-                            
-                            sql = f"""
-                            INSERT INTO `kanastra-live.finance.{tabela}` 
-                            ({', '.join(colunas_sql)})
-                            VALUES ({', '.join(valores)})
-                            """
-                            
-                        else:  # UPDATE para taxas
-                            # Gerar SQL UPDATE
-                            set_clause = []
-                            for k, v in dados.items():
-                                if k not in ['fund_id', 'cliente', 'servico', 'empresa', 'original_faixa', 'original_lower']:  # Não atualizar chaves
-                                    if v is None:
-                                        set_clause.append(f"{k} = NULL")
-                                    elif isinstance(v, str):
-                                        set_clause.append(f"{k} = '{v}'")
-                                    elif isinstance(v, (int, float)):
-                                        set_clause.append(f"{k} = {v}")
-                                    else:
-                                        set_clause.append(f"{k} = '{str(v)}'")
-                            
-                            # WHERE clause baseado na tabela
-                            if tabela == "fee_minimo":
-                                where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}' AND faixa = {dados.get('original_lower', dados['faixa'])}"
-                            else:  # fee_variavel
-                                original_faixa = dados.get('original_faixa', dados.get('original_lower', dados['faixa']))
-                                where = f"`fund id` = {dados['fund_id']} AND servico = '{dados['servico']}' AND faixa = {original_faixa}"
-                            
-                            sql = f"""
-                            UPDATE `kanastra-live.finance.{tabela}`
-                            SET {', '.join(set_clause)}
-                            WHERE {where}
-                            """
-                        
-                        # Executar query
-                        st.code(sql, language="sql")
-                        query_job = client.query(sql)
-                        query_job.result()
-                        
-                        # Limpar cache se for waiver
-                        if tabela == "waiver":
-                            st.cache_data.clear()
-                        
-                        # Atualizar status no BigQuery com aprovador
-                        aprovador = st.session_state.usuario_aprovador
-                        if atualizar_status_alteracao(alteracao['id'], 'APROVADO', aprovador):
+                            # Limpar cache se for waiver
                             if tabela == "waiver":
-                                st.success(f"✅ Waiver #{idx + 1} aprovado por {aprovador} e registrado no histórico!")
+                                st.cache_data.clear()
+                            
+                            # Atualizar status de TODAS as linhas da solicitação
+                            aprovador = st.session_state.usuario_logado
+                            sucesso_atualizacao = True
+                            for alteracao in solicitacao:
+                                if not atualizar_status_alteracao(alteracao['id'], 'APROVADO', aprovador):
+                                    sucesso_atualizacao = False
+                            
+                            if sucesso_atualizacao:
+                                if tabela == "waiver":
+                                    st.success(f"✅ Solicitação completa aprovada! {len(solicitacao)} waiver(s) registrado(s) no histórico!")
+                                else:
+                                    st.success(f"✅ Solicitação completa aprovada! {len(solicitacao)} linha(s) aplicada(s) no BigQuery!")
+                                st.rerun()
                             else:
-                                st.success(f"✅ Alteração #{idx + 1} aprovada por {aprovador} e aplicada no BigQuery!")
-                            st.rerun()
+                                st.warning("⚠️ Alterações aplicadas mas houve erro ao atualizar status")
                         else:
-                            st.error("❌ Erro ao atualizar status da alteração")
+                            st.error("❌ Erros ao processar solicitação:")
+                            for erro in erros:
+                                st.error(erro)
                         
                     except Exception as e:
-                        st.error(f"❌ Erro ao aplicar alteração: {str(e)}")
+                        st.error(f"❌ Erro geral ao processar solicitação: {str(e)}")
             
             with col_btn2:
-                if st.button(f"❌ Rejeitar #{idx + 1}", key=f"rejeitar_{idx}", use_container_width=True):
-                    aprovador = st.session_state.usuario_aprovador
-                    if atualizar_status_alteracao(alteracao['id'], 'REJEITADO', aprovador):
-                        st.warning(f"⚠️ Alteração #{idx + 1} rejeitada por {aprovador}!")
+                if st.button(f"❌ Rejeitar Solicitação Completa", key=f"rejeitar_solicitacao_{idx}", use_container_width=True):
+                    aprovador = st.session_state.usuario_logado
+                    sucesso_rejeicao = True
+                    for alteracao in solicitacao:
+                        if not atualizar_status_alteracao(alteracao['id'], 'REJEITADO', aprovador):
+                            sucesso_rejeicao = False
+                    
+                    if sucesso_rejeicao:
+                        st.warning(f"⚠️ Solicitação completa rejeitada por {aprovador}! {len(solicitacao)} linha(s) descartada(s).")
                         st.rerun()
                     else:
-                        st.error("❌ Erro ao rejeitar alteração")
+                        st.error("❌ Erro ao rejeitar solicitação")
         else:
             # Editores apenas visualizam, não podem aprovar
             st.info("⏳ Aguardando aprovação de um aprovador")
         
         st.markdown("---")
+else:
+    # Mensagem quando não há solicitações
+    if perfil == "aprovador":
+        st.info("✅ Não há solicitações pendentes de aprovação no momento")
     else:
-        # Mensagem quando não há alterações
-        if perfil == "aprovador":
-            st.info("✅ Não há alterações pendentes de aprovação no momento")
-        else:
-            st.info("📝 Você ainda não criou nenhuma alteração pendente")
+        st.info("📝 Você ainda não criou nenhuma solicitação pendente")
 
 # Sidebar
 st.sidebar.header("ℹ️ Como Usar")
