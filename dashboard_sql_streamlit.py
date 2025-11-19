@@ -20,10 +20,25 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS customizado com fontes e identidade visual Kanastra
+# CSS customizado com fontes e identidade visual Kanastra (Moderno)
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    /* Cores Kanastra */
+    :root {
+        --kanastra-green: #193c32;
+        --tech-green-1: #1e5546;
+        --tech-green-2: #14735a;
+        --tech-green-3: #2daa82;
+        --light-gray: #f8f9fa;
+        --white: #ffffff;
+    }
+    
+    /* Background geral */
+    .main {
+        background: #ffffff;
+    }
     
     /* Aplicar fonte Inter em todo o dashboard */
     html, body, [class*="css"] {
@@ -44,42 +59,133 @@ st.markdown("""
         height: 50px;
     }
     
-    /* Títulos com fonte Inter Display Medium */
+    /* Títulos com fonte Inter */
     h1, h2, h3 {
         font-family: 'Inter', sans-serif;
-        font-weight: 500;
+        font-weight: 600;
         color: #193c32;
     }
     
-    /* Botões com cores Kanastra */
+    /* Botões modernos com gradiente */
     .stButton>button {
-        background-color: #2daa82;
-        color: white;
-        font-weight: 500;
-        border-radius: 8px;
-        border: none;
-        transition: all 0.3s;
+        background: linear-gradient(135deg, #14735a 0%, #2daa82 100%) !important;
+        color: white !important;
+        font-weight: 600 !important;
+        border-radius: 12px !important;
+        padding: 0.75rem 2rem !important;
+        border: none !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 12px rgba(20, 115, 90, 0.25) !important;
     }
     
     .stButton>button:hover {
-        background-color: #14735a;
-        box-shadow: 0 4px 12px rgba(45, 170, 130, 0.3);
+        background: linear-gradient(135deg, #2daa82 0%, #14735a 100%) !important;
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(20, 115, 90, 0.4) !important;
+    }
+    
+    .stButton>button:active {
+        transform: translateY(-1px);
     }
     
     /* Metrics com destaque */
     [data-testid="stMetricValue"] {
-        color: #193c32;
-        font-weight: 600;
+        color: #14735a;
+        font-weight: 700;
     }
     
-    /* Sidebar com logo */
+    /* Sidebar com gradiente */
     [data-testid="stSidebar"] {
-        background-color: #f3f2f3;
+        background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+        border-right: 1px solid #e9ecef;
     }
     
-    /* Divisores com cor Kanastra */
+    /* Divisores */
     hr {
+        border: none;
+        border-top: 2px solid #e9ecef;
+        margin: 2rem 0;
+    }
+    
+    /* DataFrames com bordas arredondadas */
+    .dataframe {
+        border-radius: 12px !important;
+    }
+    
+    /* Alertas modernos */
+    .stAlert {
+        border-radius: 12px !important;
+        border: none !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+    }
+    
+    /* Inputs modernos */
+    .stSelectbox label, .stMultiSelect label, .stDateInput label {
+        color: #193c32 !important;
+        font-weight: 600 !important;
+        font-size: 0.95rem !important;
+    }
+    
+    /* Select boxes com bordas arredondadas */
+    .stSelectbox > div > div, .stMultiSelect > div > div {
+        border-radius: 10px !important;
+        border: 2px solid #e9ecef !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stSelectbox > div > div:focus-within, .stMultiSelect > div > div:focus-within {
+        border-color: #2daa82 !important;
+        box-shadow: 0 0 0 3px rgba(45, 170, 130, 0.1) !important;
+    }
+    
+    /* Date inputs */
+    .stDateInput > div > div > input {
+        border-radius: 10px !important;
+        border: 2px solid #e9ecef !important;
+    }
+    
+    /* Progress bar */
+    .stProgress > div > div > div > div {
+        background: linear-gradient(90deg, #14735a 0%, #2daa82 100%);
+    }
+    
+    /* Multi-select tags */
+    .stMultiSelect [data-baseweb="tag"] {
+        background: linear-gradient(135deg, #14735a 0%, #2daa82 100%);
+        border-radius: 8px;
+    }
+    
+    /* Expanders */
+    .streamlit-expanderHeader {
+        background: white;
+        border-radius: 10px;
+        border: 1px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+    
+    .streamlit-expanderHeader:hover {
         border-color: #2daa82;
+        box-shadow: 0 2px 8px rgba(45, 170, 130, 0.1);
+    }
+    
+    /* Scrollbar personalizada */
+    ::-webkit-scrollbar {
+        width: 10px;
+        height: 10px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #14735a 0%, #2daa82 100%);
+        border-radius: 10px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: #193c32;
     }
 </style>
 
