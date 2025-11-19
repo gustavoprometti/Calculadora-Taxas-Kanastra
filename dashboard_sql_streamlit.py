@@ -370,10 +370,37 @@ if 'df' in st.session_state:
             (df_filtrado['date_ref'].dt.date <= data_fim)
         ]
     
+    # SISTEMA DE INVALIDAÇÃO DE CACHE INTELIGENTE
+    @st.cache_data(ttl=300)  # Cache de 5 minutos para timestamp
+    def obter_timestamp_ultima_modificacao():
+        """Obtém timestamp da última modificação em alterações pendentes e ajustes"""
+        try:
+            client = get_bigquery_client()
+            query = """
+            SELECT MAX(timestamp_mod) as ultima_modificacao
+            FROM (
+                SELECT MAX(data_aplicacao) as timestamp_mod 
+                FROM `kanastra-live.finance.descontos`
+                UNION ALL
+                SELECT MAX(data_solicitacao) as timestamp_mod 
+                FROM `kanastra-live.finance.alteracoes_pendentes`
+            )
+            """
+            result = client.query(query).to_dataframe()
+            if not result.empty and pd.notnull(result.iloc[0]['ultima_modificacao']):
+                return result.iloc[0]['ultima_modificacao']
+            return datetime.now()
+        except Exception as e:
+            return datetime.now()
+    
     # VERIFICAR ALTERAÇÕES PENDENTES DE APROVAÇÃO
-    @st.cache_data(ttl=60)
-    def verificar_alteracoes_pendentes():
-        """Verifica se existem alterações pendentes de aprovação"""
+    @st.cache_data(ttl=3600)  # Cache de 1 hora (invalidado por timestamp)
+    def verificar_alteracoes_pendentes(cache_key):
+        """Verifica se existem alterações pendentes de aprovação
+        
+        Args:
+            cache_key: Timestamp usado para invalidar cache quando há modificações
+        """
         try:
             client = get_bigquery_client()
             query = """
@@ -392,9 +419,13 @@ if 'df' in st.session_state:
             return 0, 0
     
     # APLICAR WAIVERS E DESCONTOS APROVADOS do BigQuery
-    @st.cache_data(ttl=60)  # Cache por 1 minuto (ajustes precisam aparecer rapidamente)
-    def carregar_ajustes_ativos(data_inicio_dt, data_fim_dt, force_reload=False):
-        """Carrega waivers e descontos aprovados que se aplicam ao período"""
+    @st.cache_data(ttl=3600)  # Cache de 1 hora (invalidado por timestamp)
+    def carregar_ajustes_ativos(data_inicio_dt, data_fim_dt, cache_key):
+        """Carrega waivers e descontos aprovados que se aplicam ao período
+        
+        Args:
+            cache_key: Timestamp usado para invalidar cache quando há modificações
+        """
         try:
             client = get_bigquery_client()
             query = f"""
@@ -424,19 +455,40 @@ if 'df' in st.session_state:
             st.warning(f"⚠️ Não foi possível carregar ajustes (waivers/descontos): {e}")
             return pd.DataFrame()
     
-    # Verificar se deve forçar recarga de ajustes
+    # Obter timestamp de última modificação (atualiza a cada 5 min, mas força recarga se houver mudanças)
+    timestamp_modificacao = obter_timestamp_ultima_modificacao()
+    
+    # Verificar se deve forçar recarga de ajustes (mantém funcionalidade de botão manual)
     force_reload_ajustes = st.session_state.get('force_reload_ajustes', False)
     if force_reload_ajustes:
         carregar_ajustes_ativos.clear()
+        verificar_alteracoes_pendentes.clear()
         st.session_state.force_reload_ajustes = False
     
-    ajustes_ativos = carregar_ajustes_ativos(data_inicio, data_fim, force_reload_ajustes)
+    # Carregar dados usando timestamp como cache key (invalida automaticamente quando há alterações)
+    ajustes_ativos = carregar_ajustes_ativos(data_inicio, data_fim, timestamp_modificacao)
     
-    # Verificar alterações pendentes
-    total_pendente, solicitacoes_pendentes = verificar_alteracoes_pendentes()
+    # Verificar alterações pendentes usando mesmo timestamp
+    total_pendente, solicitacoes_pendentes = verificar_alteracoes_pendentes(timestamp_modificacao)
     
     # AVISOS DE ALTERAÇÕES PENDENTES E AJUSTES ATIVOS
     st.divider()
+    
+    # Mostrar timestamp da última verificação
+    if isinstance(timestamp_modificacao, pd.Timestamp):
+        ultima_verificacao = timestamp_modificacao.to_pydatetime()
+    else:
+        ultima_verificacao = timestamp_modificacao
+    
+    tempo_decorrido = (datetime.now() - ultima_verificacao).total_seconds()
+    if tempo_decorrido < 60:
+        tempo_texto = f"{int(tempo_decorrido)}s atrás"
+    elif tempo_decorrido < 3600:
+        tempo_texto = f"{int(tempo_decorrido // 60)}min atrás"
+    else:
+        tempo_texto = f"{int(tempo_decorrido // 3600)}h atrás"
+    
+    st.caption(f"🔄 Última verificação de alterações: {tempo_texto}")
     
     col_aviso1, col_aviso2 = st.columns(2)
     
